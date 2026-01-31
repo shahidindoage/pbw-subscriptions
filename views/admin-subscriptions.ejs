@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>All Subscriptions</title>
+</head>
+<body>
+  <h2>All Subscriptions</h2>
+  <a href="/admin/logout">Logout</a>
+  <br/><br/>
+
+  <table border="1" cellpadding="8">
+    <tr>
+      <th>Customer</th>
+      <th>Email</th>
+      <th>Product</th>
+      <th>Frequency</th>
+      <th>Quantity</th>
+      <th>Total</th>
+      <th>Status</th>
+      <th>Created</th>
+    </tr>
+
+    <% subscriptions.forEach(sub => { %>
+      <tr>
+        <td><%= sub.customer.name %></td>
+        <td><%= sub.customer.email %></td>
+        <td><%= sub.product %></td>
+        <td><%= sub.frequency %></td>
+        <td><%= sub.quantity %></td>
+        <td>₹ <%= sub.totalAmount %></td>
+        <td><%= sub.status %></td>
+        <td><%= sub.createdAt.toDateString() %></td>
+      </tr>
+    <% }) %>
+  </table>
+</body>
+</html>

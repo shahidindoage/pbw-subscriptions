@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  contact    String?
+  razorpayId String?        // Razorpay customer ID
+  password   String         // NEW plain password
+  createdAt  DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                String   @id @default(cuid())
+  razorpayOrderId    String?  @unique   // ✅ MAKE IT UNIQUE
+  razorpayPaymentId String?      // ✅ ADD
+  product           String
+  frequency         String
+  quantity          Int
+  period            Int
+  deliveryDays      String?
+  totalAmount       Float
+  deliveryFee       Float
+  status            String
+  isOneTimePurchase Boolean  @default(false)
+
+  paidAt       DateTime?         // ✅ ADD (instead of activatedAt)
+  cancelledAt  DateTime?
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@index([product])
+  @@index([status])
+}
+
+model ShopifyToken {
+  id          Int      @id @default(autoincrement())
+  accessToken String
+  expiry      DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>All Customers</title>
+</head>
+<body>
+  <h2>All Customers</h2>
+
+  <a href="/admin/subscriptions">View Subscriptions</a> |
+  <a href="/admin/logout">Logout</a>
+
+  <br/><br/>
+
+  <table border="1" cellpadding="8">
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Contact</th>
+      <th>Total Subscriptions</th>
+      <th>Active Subscriptions</th>
+    </tr>
+
+    <% customers.forEach(c => { 
+         const activeCount = c.subscriptions.filter(
+           s => s.status === "active"
+         ).length;
+    %>
+      <tr>
+        <td><%= c.name %></td>
+        <td><%= c.email %></td>
+        <td><%= c.contact || "-" %></td>
+        <td><%= c.subscriptions.length %></td>
+        <td><%= activeCount %></td>
+      </tr>
+    <% }) %>
+  </table>
+
+</body>
+</html>
