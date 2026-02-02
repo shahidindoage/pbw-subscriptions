@@ -163,49 +163,88 @@ function customerAuth(req, res, next) {
   }
   next();
 }
-app.get("/customer/dashboard", customerAuth, async (req, res) => {
-  const customer = await prisma.customer.findUnique({
-    where: { id: req.session.customerId },
-    include: {
-      subscriptions: {
-        orderBy: { createdAt: "desc" },
-        where: {
-          status: { in: ["active", "stopped"] }  // <-- only active or stopped
-        },
+app.get("/customer/dashboard", async (req, res) => {
+  try {
+    // Get email from query string (iframe)
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).send("Email required");
+    }
+
+    // Fetch customer from DB with only active subscriptions
+    const customer = await prisma.customer.findUnique({
+  where: { email },
+  include: {
+    subscriptions: {
+      orderBy: { createdAt: "desc" },
+      where: { status: { in: ["active", "stopped"] } }, // include stopped too
+    },
+  },
+});
+
+
+    if (!customer) {
+      return res.send("No customer found for this email");
+    }
+
+    // Ensure subscriptions array exists
+    customer.subscriptions = customer.subscriptions || [];
+
+    res.render("customer/dashboard", { customer });
+  } catch (err) {
+    console.error("Error fetching customer:", err);
+    res.status(500).send("Server error");
+  }
+});
+
+
+
+app.post("/customer/subscription/:id/stop", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.subscription.update({
+      where: { id },
+      data: { status: "stopped" },
+    });
+    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+  } catch (err) {
+    console.error("Stop subscription error:", err);
+    res.status(500).send("Failed to stop subscription");
+  }
+});
+
+app.post("/customer/subscription/:id/resume", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.subscription.update({
+      where: { id },
+      data: { status: "active" },
+    });
+    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+  } catch (err) {
+    console.error("Resume subscription error:", err);
+    res.status(500).send("Failed to resume subscription");
+  }
+});
+
+app.post("/customer/subscription/:id/cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.subscription.update({
+      where: { id },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
       },
-    },
-  });
-
-  res.render("customer/dashboard", { customer });
+    });
+    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+  } catch (err) {
+    console.error("Cancel subscription error:", err);
+    res.status(500).send("Failed to cancel subscription");
+  }
 });
 
-app.post("/customer/subscription/:id/stop", customerAuth, async (req, res) => {
-  await prisma.subscription.update({
-    where: { id: req.params.id },
-    data: { status: "stopped" },
-  });
-
-  res.redirect("/customer/dashboard");
-});
-app.post("/customer/subscription/:id/resume", customerAuth, async (req, res) => {
-  await prisma.subscription.update({
-    where: { id: req.params.id },
-    data: { status: "active" },
-  });
-
-  res.redirect("/customer/dashboard");
-});
-app.post("/customer/subscription/:id/cancel", customerAuth, async (req, res) => {
-  await prisma.subscription.update({
-    where: { id: req.params.id },
-    data: {
-      status: "cancelled",
-      cancelledAt: new Date(),
-    },
-  });
-
-  res.redirect("/customer/dashboard");
-});
 app.get("/customer/logout", (req, res) => {
   if (req.session.customerId) {
     delete req.session.customerId; // remove only customerId

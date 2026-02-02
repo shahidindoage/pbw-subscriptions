@@ -2,12 +2,11 @@
 <html>
 <head>
   <title>Customer Dashboard</title>
-
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       margin: 0;
-      background: #f9fafb;
+      background: #ffffff;
     }
 
     .header {
@@ -16,10 +15,15 @@
       padding: 15px;
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
 
     .container {
       padding: 20px;
+    }
+
+    h2 {
+      margin-bottom: 15px;
     }
 
     table {
@@ -35,7 +39,8 @@
     }
 
     th {
-      background: #f3f4f6;
+      background: #5e8046;
+      color: white;
     }
 
     button {
@@ -53,79 +58,79 @@
     .status-active { color: green; font-weight: bold; }
     .status-stopped { color: orange; font-weight: bold; }
     .status-cancelled { color: red; font-weight: bold; }
+
+    .no-subscriptions {
+      text-align: center;
+      padding: 20px;
+      color: #555;
+      font-weight: bold;
+    }
+
+    @media(max-width: 768px){
+      table, th, td {
+        font-size: 14px;
+      }
+      button {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
-
 <body>
 
-<div class="header">
-  <div>Welcome <%= customer.name %></div>
-  <a href="/customer/logout" style="color:white;">Logout</a>
-</div>
+<!-- <div class="header">
+  <div>Welcome <%= customer ? customer.name : "Customer" %></div>
+</div> -->
 
 <div class="container">
-
   <h2>Your Subscriptions</h2>
 
-  <table>
-    <tr>
-      <th>Product</th>
-      <th>Frequency</th>
-      <th>Status</th>
-      <th>Total</th>
-      <th>Created</th>
-      <th>Action</th>
-    </tr>
-
-    <% customer.subscriptions.forEach(sub => { %>
+  <% if (!customer || !customer.subscriptions || customer.subscriptions.length === 0) { %>
+    <div class="no-subscriptions">No subscriptions found.</div>
+  <% } else { %>
+    <table>
       <tr>
-
-        <td><%= sub.product %></td>
-        <td><%= sub.frequency %></td>
-
-        <td class="status-<%= sub.status %>">
-          <%= sub.status %>
-        </td>
-
-        <td>₹ <%= sub.totalAmount %></td>
-
-        <td>
-          <%= new Date(sub.createdAt).toDateString() %>
-        </td>
-
-        <td>
-          <% if(sub.status === "active") { %>
-
-            <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/stop">
-              <button class="stop">Stop</button>
-            </form>
-
-            <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel">
-              <button class="cancel">Cancel</button>
-            </form>
-
-          <% } else if(sub.status === "stopped") { %>
-
-            <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/resume">
-              <button class="resume">Resume</button>
-            </form>
-
-            <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel">
-              <button class="cancel">Cancel</button>
-            </form>
-
-          <% } else { %>
-
-            -
-
-          <% } %>
-        </td>
-
+        <th>Product</th>
+        <th>Frequency</th>
+        <th>Status</th>
+        <th>Total</th>
+        <th>Created</th>
+        <th>Action</th>
       </tr>
-    <% }) %>
 
-  </table>
+      <% customer.subscriptions.forEach(sub => { %>
+        <tr>
+          <td><%= sub.product %></td>
+          <td><%= sub.frequency %></td>
+          <td class="status-<%= sub.status %>"><%= sub.status %></td>
+          <td>₹ <%= sub.totalAmount %></td>
+          <td><%= new Date(sub.createdAt).toDateString() %></td>
+          <td>
+            <% if(sub.status === "active") { %>
+              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/stop?email=<%= encodeURIComponent(customer.email) %>">
+                <button class="stop">Stop</button>
+              </form>
+              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel?email=<%= encodeURIComponent(customer.email) %>">
+                <button class="cancel">Cancel</button>
+              </form>
 
+            <% } else if(sub.status === "stopped") { %>
+              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/resume?email=<%= encodeURIComponent(customer.email) %>">
+                <button class="resume">Resume</button>
+              </form>
+              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel?email=<%= encodeURIComponent(customer.email) %>">
+                <button class="cancel">Cancel</button>
+              </form>
+
+            <% } else { %>
+              - <!-- Cancelled subscriptions -->
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </table>
+  <% } %>
 </div>
 
 </body>
