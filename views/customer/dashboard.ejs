@@ -75,9 +75,43 @@
         font-size: 12px;
       }
     }
+     /* ===== Loader Overlay ===== */
+  #loaderOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+  }
+
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #ddd;
+    border-top: 5px solid #5e8046;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loader-text {
+    margin-top: 12px;
+    font-weight: bold;
+    color: #333;
+  }
   </style>
 </head>
 <body>
+<div id="loaderOverlay">
+  <div class="spinner"></div>
+  <div class="loader-text">Processing…</div>
+</div>
 
 <!-- <div class="header">
   <div>Welcome <%= customer ? customer.name : "Customer" %></div>
@@ -132,6 +166,22 @@
     </table>
   <% } %>
 </div>
+<script>
+  const loader = document.getElementById("loaderOverlay");
+
+  document.querySelectorAll("form").forEach(form => {
+    form.addEventListener("submit", () => {
+      loader.style.display = "flex";
+
+      // Disable all buttons to avoid double click
+      document.querySelectorAll("button").forEach(btn => {
+        btn.disabled = true;
+        btn.style.opacity = "0.6";
+        btn.style.cursor = "not-allowed";
+      });
+    });
+  });
+</script>
 
 </body>
 </html>

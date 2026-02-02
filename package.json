@@ -23,6 +23,7 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^7.0.13",
     "prisma": "^6.17.1",
     "razorpay": "^2.9.6"
   },

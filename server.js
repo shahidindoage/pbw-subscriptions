@@ -8,6 +8,7 @@ import session from "express-session";
 import crypto from "crypto";
 import axios from "axios";
 import { createShopifyOrder } from "./utils/createShopifyOrder.js";
+import { transporter } from "./utils/mailer.js";
 
 
 dotenv.config();
@@ -114,27 +115,78 @@ app.get("/admin/customers", isAdmin, async (req, res) => {
 app.post("/admin/subscription/:id/action", async (req, res) => {
   if (!req.session.adminId) return res.redirect("/admin/login");
 
-  const { id } = req.params;
-  const { action } = req.body;
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
 
-  let status;
+    let status;
+    let subject;
+    let htmlContent;
 
-  if (action === "stop") status = "stopped";
-  if (action === "resume") status = "active";
-  if (action === "cancel") status = "cancelled";
+    if (action === "stop") status = "stopped";
+    if (action === "resume") status = "active";
+    if (action === "cancel") status = "cancelled";
 
-  if (!status) return res.redirect("/admin/subscriptions");
+    if (!status) return res.redirect("/admin/subscriptions");
 
-  await prisma.subscription.update({
-    where: { id },
-    data: {
-      status,
-      cancelledAt: status === "cancelled" ? new Date() : null,
-    },
-  });
+    // 1️⃣ Update subscription
+    const subscription = await prisma.subscription.update({
+      where: { id },
+      data: {
+        status,
+        cancelledAt: status === "cancelled" ? new Date() : null,
+      },
+      include: { customer: true }, // needed for email
+    });
 
-  res.redirect("/admin/subscriptions");
+    // 2️⃣ Prepare email based on action
+    if (status === "stopped") {
+      subject = "Your subscription has been paused";
+      htmlContent = `
+        <p>Hi ${subscription.customer.name},</p>
+        <p>Your subscription for <b>${subscription.product}</b> (${subscription.frequency}) has been paused by the admin.</p>
+        <p>You can resume it anytime from your dashboard.</p>
+      `;
+    } else if (status === "active") {
+      subject = "Your subscription has been resumed 🎉";
+      htmlContent = `
+        <p>Hi ${subscription.customer.name},</p>
+        <p>Your subscription for <b>${subscription.product}</b> (${subscription.frequency}) has been resumed by the admin.</p>
+        <p>We’ll continue deliveries as scheduled.</p>
+      `;
+    } else if (status === "cancelled") {
+      subject = "Your subscription has expired";
+      htmlContent = `
+        <p>Hi ${subscription.customer.name},</p>
+        <p>Your subscription for <b>${subscription.product}</b> (${subscription.frequency}) has <b>expired</b> by admin action.</p>
+        <p>No further deliveries will be made under this subscription.</p>
+        <p>You can start a new subscription anytime from our website.</p>
+        <br>
+        <p>Thanks for choosing us ❤️</p>
+      `;
+    }
+
+    // 3️⃣ Send email (non-blocking)
+    try {
+      await transporter.sendMail({
+        from: `"PBW FOODS" <${process.env.GMAIL_USER}>`,
+        to: subscription.customer.email,//subscription.customer.email
+        subject,
+        html: htmlContent,
+      });
+    } catch (mailErr) {
+      console.error("Admin action email failed:", mailErr);
+    }
+
+    // 4️⃣ Redirect back to admin page
+    res.redirect("/admin/subscriptions");
+
+  } catch (err) {
+    console.error("Admin subscription action error:", err);
+    res.status(500).send("Failed to update subscription");
+  }
 });
+
 
 // Customer routes 
 
@@ -203,10 +255,32 @@ app.get("/customer/dashboard", async (req, res) => {
 app.post("/customer/subscription/:id/stop", async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.subscription.update({
+
+    const subscription = await prisma.subscription.update({
       where: { id },
       data: { status: "stopped" },
+      include: { customer: true },
     });
+
+    // 📧 Send email (non-blocking)
+    try {
+      await transporter.sendMail({
+        from: `"PBW FOODS" <${process.env.GMAIL_USER}>`,
+        to: subscription.customer.email, //subscription.customer.email
+        subject: "Your subscription has been paused",
+        html: `
+          <p>Hi ${subscription.customer.name},</p>
+          <p>
+            Your subscription for <b>${subscription.product}</b>
+            (${subscription.frequency}) has been paused.
+          </p>
+          <p>You can resume it anytime from your dashboard.</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Stop email failed:", mailErr);
+    }
+
     res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
   } catch (err) {
     console.error("Stop subscription error:", err);
@@ -214,13 +288,35 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
   }
 });
 
+
 app.post("/customer/subscription/:id/resume", async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.subscription.update({
+
+    const subscription = await prisma.subscription.update({
       where: { id },
       data: { status: "active" },
+      include: { customer: true },
     });
+
+    try {
+      await transporter.sendMail({
+        from: `"PBW FOODS" <${process.env.GMAIL_USER}>`,
+        to: subscription.customer.email,
+        subject: "Your subscription has been resumed 🎉",
+        html: `
+          <p>Hi ${subscription.customer.name},</p>
+          <p>
+            Your subscription for <b>${subscription.product}</b>
+            (${subscription.frequency}) has been resumed.
+          </p>
+          <p>We’ll continue deliveries as scheduled.</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Resume email failed:", mailErr);
+    }
+
     res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
   } catch (err) {
     console.error("Resume subscription error:", err);
@@ -228,22 +324,64 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
   }
 });
 
+
 app.post("/customer/subscription/:id/cancel", async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.subscription.update({
+    const email = req.query.email;
+
+    // 1️⃣ Update subscription as cancelled (expired)
+    const subscription = await prisma.subscription.update({
       where: { id },
       data: {
         status: "cancelled",
         cancelledAt: new Date(),
       },
+      include: {
+        customer: true, // ✅ needed for email
+      },
     });
-    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+
+    // 2️⃣ Send "Expired" email
+    try {
+      await transporter.sendMail({
+        from: `"PBW FOODS" <${process.env.GMAIL_USER}>`,
+        to: subscription.customer.email,
+        subject: "Your subscription has expired",
+        html: `
+          <p>Hi ${subscription.customer.name},</p>
+
+          <p>
+            Your subscription for <b>${subscription.product}</b>
+            (${subscription.frequency}) has <b>expired</b>.
+          </p>
+
+          <p>
+            No further deliveries will be made under this subscription.
+          </p>
+
+          <p>
+            You can start a new subscription anytime from our website.
+          </p>
+
+          <br>
+          <p>Thanks for choosing us ❤️</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Expire email failed:", mailErr);
+    }
+
+    // 3️⃣ Redirect back to dashboard
+    res.redirect(
+      "/customer/dashboard?email=" + encodeURIComponent(email)
+    );
   } catch (err) {
-    console.error("Cancel subscription error:", err);
-    res.status(500).send("Failed to cancel subscription");
+    console.error("Cancel (expire) subscription error:", err);
+    res.status(500).send("Failed to expire subscription");
   }
 });
+
 
 app.get("/customer/logout", (req, res) => {
   if (req.session.customerId) {
@@ -516,13 +654,46 @@ app.post("/verify-payment", async (req, res) => {
 
     // 2️⃣ Activate subscription
     const subscription = await prisma.subscription.update({
-      where: { razorpayOrderId: razorpay_order_id },
-      data: {
-        status: "active",
-        razorpayPaymentId: razorpay_payment_id,
-        paidAt: new Date(),        // ✅ CORRECT FIELD
-      },
-    });
+  where: { razorpayOrderId: razorpay_order_id },
+  data: {
+    status: "active",
+    razorpayPaymentId: razorpay_payment_id,
+    paidAt: new Date(),
+  },
+  include: {
+    customer: true,
+  },
+});
+const startDate = subscription.paidAt || subscription.createdAt;
+const expiryDate = new Date(startDate);
+expiryDate.setDate(expiryDate.getDate() + subscription.period * 7);
+
+try {
+  await transporter.sendMail({
+    from: `"PBW FOODS" <${process.env.GMAIL_USER}>`,
+    to: subscription.customer.email, //subscription.customer.email
+    subject: "Your subscription is activated 🎉",
+    html: `
+      <p>Hi ${subscription.customer.name},</p>
+
+      <p>
+        Your subscription for <b>${subscription.product}</b>
+        (${subscription.frequency}) has been activated.
+      </p>
+
+      <p>
+        <b>Start Date:</b> ${startDate.toDateString()}<br/>
+        <b>Expiry Date:</b> ${expiryDate.toDateString()}
+      </p>
+
+      <p>Thank you for subscribing 💚</p>
+    `,
+  });
+
+  console.log("Subscription activation email sent");
+} catch (emailErr) {
+  console.error("Email sending failed:", emailErr);
+}
 
     res.json({ success: true, subscription });
   } catch (err) {
