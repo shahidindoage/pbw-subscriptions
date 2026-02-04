@@ -7,45 +7,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
+// =======================
+// Customers
+// =======================
+//
 model Customer {
   id         String   @id @default(cuid())
   name       String
   email      String   @unique
   contact    String?
-  razorpayId String?        // Razorpay customer ID
-  password   String         // NEW plain password
+  razorpayId String?
+  password   String
+  address    Json?            // ✅ DEFAULT / LAST USED ADDRESS
   createdAt  DateTime @default(now())
 
   subscriptions Subscription[]
 }
 
+//
+// =======================
+// Subscriptions
+// =======================
+//
 model Subscription {
-  id                String   @id @default(cuid())
-  razorpayOrderId    String?  @unique   // ✅ MAKE IT UNIQUE
-  razorpayPaymentId String?      // ✅ ADD
-  product           String
-  frequency         String
-  quantity          Int
-  period            Int
-  deliveryDays      String?
-  totalAmount       Float
-  deliveryFee       Float
-  status            String
-  isOneTimePurchase Boolean  @default(false)
-
-  paidAt       DateTime?         // ✅ ADD (instead of activatedAt)
-  cancelledAt  DateTime?
-
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id])
-
-  createdAt DateTime @default(now())
+  id                  String   @id @default(cuid())
+  razorpayOrderId      String?  @unique
+  razorpayPaymentId    String?
+  product             String
+  variantId           String?  // ✅ Add this
+  frequency           String
+  quantity            Int
+  period              Int
+  deliveryDays        String? 
+  totalAmount         Float
+  deliveryFee         Float
+  status              String
+  isOneTimePurchase   Boolean  @default(false)
+  paidAt              DateTime?
+  cancelledAt         DateTime?
+  nextShippingDate    DateTime?
+  subscriptionEndDate DateTime?
+  pausedAt            DateTime?
+  address             Json?    // optional customer snapshot
+  customerId          String
+  customer            Customer @relation(fields: [customerId], references: [id])
+  shopifyOrders       ShopifyOrder[]
+  createdAt           DateTime @default(now())
 
   @@index([customerId])
   @@index([product])
   @@index([status])
 }
 
+
+//
+// =======================
+// Shopify Orders (Per Delivery)
+// =======================
+//
+model ShopifyOrder {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  shippingDate   DateTime
+  shopifyOrderId String?
+  status         String
+
+  shippingAddress Json?
+  billingAddress  Json?
+  note            String?
+  noteAttributes  Json?
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([subscriptionId, shippingDate])
+  @@index([subscriptionId])
+  @@index([shippingDate])
+}
+
+//
+// =======================
+// Shopify Token
+// =======================
+//
 model ShopifyToken {
   id          Int      @id @default(autoincrement())
   accessToken String

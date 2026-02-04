@@ -8,7 +8,8 @@ import session from "express-session";
 import crypto from "crypto";
 import axios from "axios";
 import { createShopifyOrder } from "./utils/createShopifyOrder.js";
-
+// import "./cron/runCron.js"
+// import { addDays } from "date-fns";
 
 dotenv.config();
 
@@ -117,24 +118,43 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
   const { id } = req.params;
   const { action } = req.body;
 
-  let status;
+  let data = {};
 
-  if (action === "stop") status = "stopped";
-  if (action === "resume") status = "active";
-  if (action === "cancel") status = "cancelled";
+  if (action === "stop") {
+    data = {
+      status: "stopped",
+      pausedAt: new Date(),
+    };
+  }
 
-  if (!status) return res.redirect("/admin/subscriptions");
+  if (action === "resume") {
+    data = {
+      status: "active",
+      pausedAt: null,
+    };
+  }
+
+  if (action === "cancel") {
+    data = {
+      status: "cancelled",
+      cancelledAt: new Date(),
+      pausedAt: null,
+      nextShippingDate: null, // 🔥 THIS IS THE KEY FIX
+    };
+  }
+
+  if (!Object.keys(data).length) {
+    return res.redirect("/admin/subscriptions");
+  }
 
   await prisma.subscription.update({
     where: { id },
-    data: {
-      status,
-      cancelledAt: status === "cancelled" ? new Date() : null,
-    },
+    data,
   });
 
   res.redirect("/admin/subscriptions");
 });
+
 
 // Customer routes 
 
@@ -203,30 +223,105 @@ app.get("/customer/dashboard", async (req, res) => {
 app.post("/customer/subscription/:id/stop", async (req, res) => {
   try {
     const { id } = req.params;
+
+    const sub = await prisma.subscription.findUnique({
+      where: { id },
+    });
+
+    if (!sub) {
+      return res.status(404).send("Subscription not found");
+    }
+
+    if (sub.pausedAt) {
+      return res.redirect(
+        "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
+      );
+    }
+
     await prisma.subscription.update({
       where: { id },
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        pausedAt: new Date(),
+      },
     });
-    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+
+    res.redirect(
+      "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
+    );
   } catch (err) {
     console.error("Stop subscription error:", err);
     res.status(500).send("Failed to stop subscription");
   }
 });
 
+
+
+
 app.post("/customer/subscription/:id/resume", async (req, res) => {
   try {
     const { id } = req.params;
+
+    const sub = await prisma.subscription.findUnique({
+      where: { id },
+    });
+
+    if (!sub || !sub.pausedAt) {
+      return res.redirect(
+        "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
+      );
+    }
+
+    const now = new Date();
+
+    // 1️⃣ Calculate paused days
+    const pausedMs = now.getTime() - sub.pausedAt.getTime();
+    const pausedDays = Math.ceil(pausedMs / (1000 * 60 * 60 * 24));
+
+    // 2️⃣ Extend end date
+    const newEndDate = addDays(sub.subscriptionEndDate, pausedDays);
+
+    // 3️⃣ Shift next shipping date
+    let newNextShippingDate = addDays(sub.nextShippingDate, pausedDays);
+
+    // 4️⃣ Align with delivery days
+    const deliveryDays = sub.deliveryDays.split(",");
+    const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+
+    for (let i = 0; i < 14; i++) {
+      if (deliveryDays.some(d => dayMap[d] === newNextShippingDate.getDay())) {
+        break;
+      }
+      newNextShippingDate = addDays(newNextShippingDate, 1);
+    }
+
+    // 5️⃣ Update subscription
     await prisma.subscription.update({
       where: { id },
-      data: { status: "active" },
+      data: {
+        status: "active",
+        pausedAt: null,
+        nextShippingDate: newNextShippingDate,
+        subscriptionEndDate: newEndDate,
+      },
     });
-    res.redirect("/customer/dashboard?email=" + encodeURIComponent(req.query.email));
+
+    console.log("▶️ Subscription resumed:", {
+      pausedDays,
+      newNextShippingDate,
+      newEndDate,
+    });
+
+    res.redirect(
+      "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
+    );
   } catch (err) {
     console.error("Resume subscription error:", err);
     res.status(500).send("Failed to resume subscription");
   }
 });
+
+
 
 app.post("/customer/subscription/:id/cancel", async (req, res) => {
   try {
@@ -296,6 +391,8 @@ return res.json({ exists: false });
 });
 
 // ===== Create Subscription (Normal Razorpay Payment) =====
+import { addDays, nextDay } from "date-fns"; // npm i date-fns
+
 app.post("/create-subscription", async (req, res) => {
   try {
     const {
@@ -303,70 +400,52 @@ app.post("/create-subscription", async (req, res) => {
       email,
       contact,
       product,
-      variantId,
-      frequency,   // 1,2,3 from frontend
+      variantId, // (kept, not used here)
+      frequency,
       quantity,
       period,
-      deliveryDays,
+      deliveryDays, // ["Mon","Thu"]
       totalAmount,
       deliveryFee,
-      address 
+      address
     } = req.body;
 
-    // ===== 1️⃣ Get or create customer =====
+    // ===============================
+    // 1️⃣ Get or create customer
+    // ===============================
     let dbCustomer = await prisma.customer.findUnique({ where: { email } });
     const rzCustomer = await getOrCreateRazorpayCustomer(name, email, contact);
 
     if (!dbCustomer) {
-      const randomPassword = crypto.randomBytes(4).toString("hex"); // 8-character random password
+      const randomPassword = crypto.randomBytes(4).toString("hex");
 
-  dbCustomer = await prisma.customer.create({
-    data: {
-      name,
-      email,
-      contact: contact || null,
-      razorpayId: rzCustomer.id,
-      password: randomPassword, // store plain password
-    },
-  });
-    } else if (!dbCustomer.razorpayId) {
+      dbCustomer = await prisma.customer.create({
+        data: {
+          name,
+          email,
+          contact: contact || null,
+          razorpayId: rzCustomer.id,
+          password: randomPassword,
+          address: address || null, // ✅ store default address
+        },
+      });
+    } else {
       dbCustomer = await prisma.customer.update({
         where: { email },
-        data: { razorpayId: rzCustomer.id, name, contact: contact || null },
+        data: {
+          razorpayId: dbCustomer.razorpayId || rzCustomer.id,
+          name,
+          contact: contact || null,
+          address: address || dbCustomer.address, // ✅ update last-used address
+        },
       });
     }
 
-    // ===== 2️⃣ Cancel previous subscriptions if exists =====
-    // const previousSubs = await prisma.subscription.findMany({
-    //   where: {
-    //     customerId: dbCustomer.id,
-    //     product,
-    //     status: { not: "cancelled" },
-    //   },
-    // });
-
-    // for (let sub of previousSubs) {
-    //   await prisma.subscription.update({
-    //     where: { id: sub.id },
-    //     data: { status: "cancelled", cancelledAt: new Date() },
-    //   });
-    // }
-// Cancel previous subscriptions efficiently
-// await prisma.subscription.updateMany({
-//   where: {
-//     customerId: dbCustomer.id,
-//     product,
-//     status: { not: "cancelled" },
-//   },
-//   data: {
-//     status: "cancelled",
-//     cancelledAt: new Date(),
-//   },
-// });
-
-    // ===== 3️⃣ Create Razorpay Order =====
+    // ===============================
+    // 2️⃣ Create Razorpay Order
+    // ===============================
     const order = await razorpay.orders.create({
-      amount: Math.round(totalAmount * 100), // in paise
+      amount: Math.round(totalAmount * 100),
       currency: "INR",
       receipt: `rcpt_${Date.now()}`,
       notes: {
@@ -380,120 +459,67 @@ app.post("/create-subscription", async (req, res) => {
       },
     });
 
+    // ===============================
+    // 3️⃣ Calculate subscriptionEndDate
+    // ===============================
+    const now = new Date();
+    const subscriptionEndDate = addDays(now, period * 7);
 
+    // ===============================
+    // 4️⃣ Calculate first nextShippingDate
+    // ===============================
+    const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+    let nextShippingDate = null;
 
-    // ===== 5️⃣ Store subscription in DB =====
-    const sub = await prisma.subscription.create({
-      data: {
-        razorpayOrderId: order.id,
-        product,
-        frequency: frequency.toString(),
-        quantity,
-        period,
-        deliveryDays: deliveryDays?.join(",") || null,
-        totalAmount,
-        deliveryFee,
-        status: "pending",
-        customerId: dbCustomer.id,
-        isOneTimePurchase: false,
-      },
-    });
-
-
-
-     // ===== 5️⃣ Create Shopify order (sample address) =====
-    try {
-      const shopifyOrderData = {
-  order: {
-    line_items: [
-      {
-        variant_id: variantId,
-        quantity,
-      },
-    ],
-
-    customer: {
-      first_name: name.split(" ")[0] || "Test",
-      last_name: name.split(" ")[1] || "Customer",
-      email
-    },
-
-    financial_status: "paid",
-    fulfillment_status: "unfulfilled",
-
-    // ✅ Simple note (visible in order page)
-    note: `Subscription Details:
-Product: ${product}
-Frequency: ${frequency}
-Quantity: ${quantity}
-Period: ${period}
-Delivery Days: ${deliveryDays?.join(", ") || "N/A"}
-Total Amount: ${totalAmount}
-Delivery Fee: ${deliveryFee}`,
-
-    // ✅ Structured notes (Best practice for apps)
-    note_attributes: [
-      { name: "Product", value: product },
-      { name: "Frequency", value: frequency?.toString() },
-      { name: "Quantity", value: quantity?.toString() },
-      { name: "Period", value: period?.toString() },
-      { name: "Delivery Days", value: deliveryDays?.join(",") || "" },
-      { name: "Total Amount", value: totalAmount?.toString() },
-      { name: "Delivery Fee", value: deliveryFee?.toString() },
-    ],
-
-    shipping_address: {
-      first_name:
-        address?.name?.split(" ")[0] ||
-        name.split(" ")[0] ||
-        "Customer",
-
-      last_name: address?.name?.split(" ")[1] || "",
-
-      phone: address?.phone || contact || "",
-
-      address1: address?.line1 || "",
-      address2: address?.line2 || "",
-      city: address?.city || "",
-      province: address?.state || "",
-      zip: address?.pincode || "",
-      country: "India",
-    },
-
-    billing_address: {
-      first_name:
-        address?.name?.split(" ")[0] ||
-        name.split(" ")[0] ||
-        "Customer",
-
-      last_name: address?.name?.split(" ")[1] || "",
-
-      phone: address?.phone || contact || "",
-
-      address1: address?.line1 || "",
-      address2: address?.line2 || "",
-      city: address?.city || "",
-      province: address?.state || "",
-      zip: address?.pincode || "",
-      country: "India",
-    },
-  },
-};
-
-
-
-      const shopifyRes = await createShopifyOrder(shopifyOrderData);
-console.log("Shopify order created:", shopifyRes.order.id);
-    } catch (shopifyErr) {
-      console.error("Shopify order creation failed:", shopifyErr.response?.data || shopifyErr);
+    for (let i = 1; i <= 7; i++) {
+      const candidate = addDays(now, i);
+      if (deliveryDays.some(d => dayMap[d] === candidate.getDay())) {
+        nextShippingDate = candidate;
+        break;
+      }
     }
 
-    res.json({ order, subscription: sub, customer: dbCustomer });
+    if (!nextShippingDate) {
+      return res.status(400).json({ error: "Invalid delivery days" });
+    }
+
+    // ===============================
+    // 5️⃣ Store subscription (NO Shopify order here ❌)
+    // ===============================
+   const sub = await prisma.subscription.create({
+  data: {
+    razorpayOrderId: order.id,
+    product,
+    variantId, // ✅ store it
+    frequency: frequency.toString(),
+    quantity,
+    period,
+    deliveryDays: deliveryDays.join(","),
+    totalAmount,
+    deliveryFee,
+    status: "pending",
+    customerId: dbCustomer.id,
+    isOneTimePurchase: false,
+    subscriptionEndDate,
+    nextShippingDate,
+    address: address || null,
+  },
+});
+
+
+    res.json({
+      order,
+      subscription: sub,
+      customer: dbCustomer,
+    });
+
   } catch (err) {
     console.error("Subscription creation failed:", err);
     res.status(500).json({ error: "Subscription creation failed" });
   }
 });
+
+
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -502,7 +528,9 @@ app.post("/verify-payment", async (req, res) => {
       razorpay_signature,
     } = req.body;
 
-    // 1️⃣ Verify signature
+    // ===============================
+    // 1️⃣ Verify Razorpay signature
+    // ===============================
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
@@ -514,22 +542,29 @@ app.post("/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
+    // ===============================
     // 2️⃣ Activate subscription
+    // ===============================
     const subscription = await prisma.subscription.update({
       where: { razorpayOrderId: razorpay_order_id },
       data: {
         status: "active",
         razorpayPaymentId: razorpay_payment_id,
-        paidAt: new Date(),        // ✅ CORRECT FIELD
+        paidAt: new Date(),
       },
     });
 
-    res.json({ success: true, subscription });
+    res.json({
+      success: true,
+      subscription,
+    });
+
   } catch (err) {
     console.error("Payment verification failed:", err);
     res.status(500).json({ error: "Payment verification failed" });
   }
 });
+
 
 
 // ===== Webhook (Optional) =====
