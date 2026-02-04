@@ -1,16 +1,15 @@
 import prisma from "../utils/prisma.js";
 import { runSubscriptionScheduler } from "./subscriptionScheduler.js";
 
-console.log("🕒 Render cron started");
+console.log("🕒 Cron job started");
 
 try {
   await runSubscriptionScheduler();
   console.log("✅ Scheduler completed successfully");
 } catch (err) {
   console.error("❌ Scheduler failed:", err);
-  process.exitCode = 1;
+  process.exitCode = 1; // cron-job.org marks job as failed
 } finally {
-  await prisma.$disconnect();   // ✅ HERE
+  await prisma.$disconnect();
   console.log("🔌 Prisma disconnected");
-  process.exit();
 }

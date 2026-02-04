@@ -10,6 +10,7 @@ import axios from "axios";
 import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import "./cron/runCron.js"
 // import { addDays } from "date-fns";
+import cronRoutes from "./routes/cron.js";
 
 dotenv.config();
 
@@ -30,7 +31,7 @@ app.use(
     saveUninitialized: false,
   })
 );
-
+app.use("/cron", cronRoutes);
 // ===== Razorpay Client =====
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
