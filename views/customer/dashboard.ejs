@@ -129,38 +129,51 @@
         <th>Frequency</th>
         <th>Status</th>
         <th>Total</th>
-        <th>Created</th>
+        <th>Subscription Start</th>
+         <th>Next Shipping</th>
+        <th>Subscription End</th>
+        
         <th>Action</th>
       </tr>
 
       <% customer.subscriptions.forEach(sub => { %>
         <tr>
           <td><%= sub.product %></td>
-          <td><%= sub.frequency %></td>
+          <td><%= sub.frequency %> ( <%= sub.deliveryDays || "-" %> )</td>
           <td class="status-<%= sub.status %>"><%= sub.status %></td>
           <td>₹ <%= sub.totalAmount %></td>
           <td><%= new Date(sub.createdAt).toDateString() %></td>
+           <td>
+    <%= sub.nextShippingDate
+      ? new Date(sub.nextShippingDate).toDateString()
+      : "-" %>
+  </td>
+
+  <td>
+    <%= sub.subscriptionEndDate
+      ? new Date(sub.subscriptionEndDate).toDateString()
+      : "-" %>
+  </td>
+          
           <td>
-            <% if(sub.status === "active") { %>
-              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/stop?email=<%= encodeURIComponent(customer.email) %>">
-                <button class="stop">Stop</button>
-              </form>
-              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel?email=<%= encodeURIComponent(customer.email) %>">
-                <button class="cancel">Cancel</button>
-              </form>
+  <button class="resume"
+    onclick="openOrdersModal('<%= sub.id %>')">
+    Show Orders
+  </button>
 
-            <% } else if(sub.status === "stopped") { %>
-              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/resume?email=<%= encodeURIComponent(customer.email) %>">
-                <button class="resume">Resume</button>
-              </form>
-              <form style="display:inline;" method="POST" action="/customer/subscription/<%= sub.id %>/cancel?email=<%= encodeURIComponent(customer.email) %>">
-                <button class="cancel">Cancel</button>
-              </form>
+  <% if(sub.status === "active") { %>
+    <form style="display:inline;" method="POST"
+      action="/customer/subscription/<%= sub.id %>/stop?email=<%= encodeURIComponent(customer.email) %>">
+      <button class="stop">Stop</button>
+    </form>
+  <% } else if(sub.status === "stopped") { %>
+    <form style="display:inline;" method="POST"
+      action="/customer/subscription/<%= sub.id %>/resume?email=<%= encodeURIComponent(customer.email) %>">
+      <button class="resume">Resume</button>
+    </form>
+  <% } %>
+</td>
 
-            <% } else { %>
-              - <!-- Cancelled subscriptions -->
-            <% } %>
-          </td>
         </tr>
       <% }) %>
     </table>
@@ -181,7 +194,69 @@
       });
     });
   });
+
+
+function openOrdersModal(subscriptionId) {
+  const modal = document.getElementById("ordersModal");
+  const tbody = document.getElementById("ordersTableBody");
+
+  modal.style.display = "block";
+  tbody.innerHTML = `<tr><td colspan="4">Loading…</td></tr>`;
+
+  fetch(`/customer/subscription/${subscriptionId}/orders`)
+    .then(res => res.json())
+    .then(data => {
+      if (!data.orders || data.orders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4">No orders created yet</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = "";
+      data.orders.forEach(order => {
+        tbody.innerHTML += `
+          <tr>
+              <td>${order.subscription?.product || "-"}</td>
+            <td>${order.shopifyOrderId || "-"}</td>
+            <td>${new Date(order.shippingDate).toDateString()}</td>
+            <td>${order.status}</td>
+            
+          </tr>
+        `;
+      });
+    })
+    .catch(() => {
+      tbody.innerHTML = `<tr><td colspan="4">Failed to load orders</td></tr>`;
+    });
+}
+
+function closeOrdersModal() {
+  document.getElementById("ordersModal").style.display = "none";
+}
+
 </script>
+<div id="ordersModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000;">
+  <div style="background:#fff; max-width:800px; margin:60px auto; padding:20px; border-radius:8px; position:relative;">
+    <h3>Subscription Orders</h3>
+
+    <button onclick="closeOrdersModal()"
+      style="position:absolute; top:10px; right:10px;">✕</button>
+
+    <table style="margin-top:15px;">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Shopify Order ID</th>
+          <th>Shipping Date</th>
+          <th>Status</th>
+       
+        </tr>
+      </thead>
+      <tbody id="ordersTableBody">
+        <tr><td colspan="4">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
 </body>
 </html>

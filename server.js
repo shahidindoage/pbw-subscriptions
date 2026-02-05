@@ -11,6 +11,8 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import "./cron/runCron.js"
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
+import { sendWelcomeEmail } from "./utils/email.js";
+
 
 dotenv.config();
 
@@ -125,12 +127,57 @@ app.get("/admin/dashboard", isAdmin, async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
 
+  const shopifyOrders = await prisma.shopifyOrder.findMany({
+    include: {
+      subscription: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
   res.render("admin-dashboard", {
-    page: "customers", // default view
+    page: req.query.page || "customers",
     customers,
     subscriptions,
+    shopifyOrders,
   });
 });
+app.post("/admin/shopify-order/:id/status", isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  await prisma.shopifyOrder.update({
+    where: { id },
+    data: { status },
+  });
+
+  // ✅ redirect back to Shopify Orders tab
+  res.redirect("/admin/dashboard?page=shopify-orders");
+});
+app.get("/admin/subscription/:id/orders", isAdmin, async (req, res) => {
+  const orders = await prisma.shopifyOrder.findMany({
+    where: { subscriptionId: req.params.id },
+    include: {
+      subscription: true,
+    },
+    orderBy: { shippingDate: "asc" },
+  });
+
+  res.json(
+    orders.map(o => ({
+      id: o.id,
+      shopifyOrderId: o.shopifyOrderId,
+      shippingDate: o.shippingDate,
+      status: o.status,
+      createdAt: o.createdAt,
+      product: o.subscription.product,
+    }))
+  );
+});
+
 
 app.get("/admin/subscriptions", isAdmin, async (req, res) => {
   const subscriptions = await prisma.subscription.findMany({
@@ -259,6 +306,28 @@ app.get("/customer/dashboard", async (req, res) => {
   } catch (err) {
     console.error("Error fetching customer:", err);
     res.status(500).send("Server error");
+  }
+});
+app.get("/customer/subscription/:id/orders", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const orders = await prisma.shopifyOrder.findMany({
+      where: { subscriptionId: id },
+      orderBy: { shippingDate: "desc" },
+      include: {
+      subscription: {
+        select: {
+          product: true,
+        },
+      },
+    },
+    });
+
+    res.json({ orders });
+  } catch (err) {
+    console.error("Fetch Shopify orders error:", err);
+    res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
 
@@ -581,7 +650,12 @@ const order = await razorpay.orders.create({
   },
 });
 
-
+// 6️⃣ Send Welcome Email
+try {
+  await sendWelcomeEmail(dbCustomer, sub);
+} catch (err) {
+  console.error("Failed to send welcome email:", err);
+}
 
     res.json({
       order,

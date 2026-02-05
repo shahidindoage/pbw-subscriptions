@@ -60,93 +60,401 @@
       Subscriptions
     </a>
 
+<a href="/admin/dashboard?page=shopify-orders"
+   class="<%= page === 'shopify-orders' ? 'active' : '' %>">
+  Shopify Orders
+</a>
+
     <br>
     <a href="/admin/logout">Logout</a>
   </div>
 
   <!-- CONTENT -->
   <div class="content">
+<div style="margin-bottom:15px;">
+  <input
+    type="text"
+    id="adminSearch"
+    placeholder="Search by email, product, subscription ID, order ID…"
+    style="padding:8px; width:300px; max-width:100%;"
+    onkeyup="filterTable()"
+  />
+</div>
 
-    <% if (page === "customers") { %>
-      <h2>Customers</h2>
-      <table>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Contact</th>
-          <th>Total Subs</th>
-          <th>Active Subs</th>
-        </tr>
-        <% customers.forEach(c => { 
-          const active = c.subscriptions.filter(s => s.status === "active").length;
-        %>
-          <tr>
-            <td><%= c.name %></td>
-            <td><%= c.email %></td>
-            <td><%= c.contact || "-" %></td>
-            <td><%= c.subscriptions.length %></td>
-            <td><%= active %></td>
-          </tr>
-        <% }) %>
-      </table>
-    <% } %>
+   <% if (page === "customers") { %>
+  <h2>Customers</h2>
 
-    <% if (page === "subscriptions") { %>
-      <h2>Subscriptions</h2>
-      <table>
-        <tr>
-          <th>Customer</th>
-          <th>Product</th>
-          <th>Frequency</th>
-          <th>Status</th>
-          <th>Amount</th>
-          <th>Created</th>
-          <th>Actions</th>
-        </tr>
-        <% subscriptions.forEach(s => { %>
-          <tr>
-  <td><%= s.customer.email %></td>
-  <td><%= s.product %></td>
-  <td><%= s.frequency %></td>
-  <td><%= s.status %></td>
-  <td>₹<%= s.totalAmount %></td>
-  <td><%= s.createdAt.toDateString() %></td>
+  <table id="adminTable">
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Contact</th>
+      <th>Address</th>
+      <th>Password</th>
+      <th>Total Subs</th>
+      <th>Active Subs</th>
+    </tr>
 
-  <td>
-    <% if (s.status === "active") { %>
-      <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
-        <input type="hidden" name="action" value="stop">
-        <button type="submit">Stop</button>
-      </form>
+    <% customers.forEach(c => { 
+      const active = c.subscriptions.filter(s => s.status === "active").length;
+    %>
+      <tr>
+        <td><%= c.name %></td>
+        <td><%= c.email %></td>
+        <td><%= c.contact || "-" %></td>
 
-      <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
-        <input type="hidden" name="action" value="cancel">
-        <button type="submit">Cancel</button>
-      </form>
+        <!-- Address -->
+        <td>
+  <% if (c.address) { %>
+    <button
+      type="button"
+      onclick='showAddress(<%- JSON.stringify(c.address) %>)'
+      style="padding:4px 8px; cursor:pointer;"
+    >
+      View
+    </button>
+  <% } else { %>
+    -
+  <% } %>
+</td>
 
-    <% } else if (s.status === "stopped") { %>
-      <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
-        <input type="hidden" name="action" value="resume">
-        <button type="submit">Resume</button>
-      </form>
 
-      <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
-        <input type="hidden" name="action" value="cancel">
-        <button type="submit">Cancel</button>
-      </form>
+        <!-- Password (Hidden / Show Toggle) -->
+        <td>
+          <span
+            class="password-text"
+            data-password="<%= c.password %>"
+          >
+            ••••••••
+          </span>
+          <button
+            type="button"
+            onclick="togglePassword(this)"
+            style="margin-left:6px;"
+          >
+            Show
+          </button>
+        </td>
 
-    <% } else { %>
-      _
-    <% } %>
-  </td>
-</tr>
+        <td><%= c.subscriptions.length %></td>
+        <td><%= active %></td>
+      </tr>
+    <% }) %>
+  </table>
+<% } %>
 
-        <% }) %>
-      </table>
-    <% } %>
+
+  <% if (page === "subscriptions") { %>
+  <h2>Subscriptions</h2>
+
+  <table id="adminTable">
+    <tr>
+      <th>Subscription ID</th>
+      <th>Customer</th>
+      <th>Product</th>
+      <!-- <th>Variant</th> -->
+      <th>Frequency</th>
+      <th>Qty</th>
+      <th>Delivery Days</th>
+      <th>Status</th>
+      <!-- <th>One-Time</th> -->
+      <th>Total</th>
+      <th>Delivery Fee</th>
+      <th>Next Shipping</th>
+      <th>End Date</th>
+      <th>Paid At</th>
+      <th>Actions</th>
+    </tr>
+
+    <% subscriptions.forEach(s => { %>
+      <tr>
+        <td><%= s.id %></td>
+
+        <td><%= s.customer.email %></td>
+
+        <td><%= s.product %></td>
+
+        <!-- <td><%= s.variantId || "-" %></td> -->
+
+        <td><%= s.frequency %></td>
+
+        <td><%= s.quantity %></td>
+
+        <td><%= s.deliveryDays || "-" %></td>
+
+        <td><strong><%= s.status %></strong></td>
+
+        <!-- <td><%= s.isOneTimePurchase ? "Yes" : "No" %></td> -->
+
+        <td>₹<%= s.totalAmount %></td>
+
+        <td>₹<%= s.deliveryFee %></td>
+
+        <td>
+          <%= s.nextShippingDate
+            ? s.nextShippingDate.toDateString()
+            : "-" %>
+        </td>
+
+        <td>
+          <%= s.subscriptionEndDate
+            ? s.subscriptionEndDate.toDateString()
+            : "-" %>
+        </td>
+
+        <td><%= s.createdAt.toDateString() %></td>
+
+        <td>
+          <% if (s.status === "active") { %>
+            <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
+              <input type="hidden" name="action" value="stop">
+              <button type="submit">Stop</button>
+            </form>
+ <button type="button" onclick="openOrdersModal('<%= s.id %>')">
+      View Orders
+    </button>
+            <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
+              <input type="hidden" name="action" value="cancel">
+              <button type="submit">Cancel</button>
+            </form>
+
+          <% } else if (s.status === "stopped") { %>
+            <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
+              <input type="hidden" name="action" value="resume">
+              <button type="submit">Resume</button>
+            </form>
+ <button type="button" onclick="openOrdersModal('<%= s.id %>')">
+      View Orders
+    </button>
+            <form method="POST" action="/admin/subscription/<%= s.id %>/action" style="display:inline;">
+              <input type="hidden" name="action" value="cancel">
+              <button type="submit">Cancel</button>
+            </form>
+
+          <% } else { %>
+            -
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+  </table>
+<% } %>
+
+
+
+   <% if (page === "shopify-orders") { %>
+  <h2>Shopify Orders</h2>
+
+  <table id="adminTable">
+    <tr>
+      <th>Customer</th>
+      <th>Product</th>
+      <th>Subscription ID</th>
+      <th>Frequency</th>
+      <th>Shopify Order</th>
+      <th>Shipping Date</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Action</th>
+    </tr>
+
+    <% shopifyOrders.forEach(o => { %>
+      <tr>
+        <td><%= o.subscription.customer.email %></td>
+        <td><%= o.subscription.product %></td>
+
+        <!-- ✅ Subscription ID -->
+        <td style="font-size:12px;">
+          <%= o.subscription.id %>
+        </td>
+
+        <!-- ✅ Frequency -->
+        <td>
+          <%= o.subscription.frequency %>
+        </td>
+
+        <!-- Shopify Order ID -->
+        <td>
+          <% if (o.shopifyOrderId) { %>
+            <%= o.shopifyOrderId %>
+          <% } else { %>
+            -
+          <% } %>
+        </td>
+
+        <td><%= o.shippingDate.toDateString() %></td>
+
+        <td><strong><%= o.status %></strong></td>
+
+        <td><%= o.createdAt.toDateString() %></td>
+
+        <td>
+          <form method="POST" action="/admin/shopify-order/<%= o.id %>/status">
+            <select name="status" onchange="this.form.submit()">
+              <option value="created" <%= o.status === "created" ? "selected" : "" %>>Created</option>
+              <option value="processing" <%= o.status === "processing" ? "selected" : "" %>>Processing</option>
+              <option value="shipped" <%= o.status === "shipped" ? "selected" : "" %>>Shipped</option>
+              <option value="delivered" <%= o.status === "delivered" ? "selected" : "" %>>Delivered</option>
+              <option value="cancelled" <%= o.status === "cancelled" ? "selected" : "" %>>Cancelled</option>
+            </select>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </table>
+<% } %>
+
 
   </div>
 </div>
+<script>
+function filterTable() {
+  const input = document.getElementById("adminSearch");
+  const filter = input.value.toLowerCase();
+  const table = document.getElementById("adminTable");
+
+  if (!table) return;
+
+  const rows = table.getElementsByTagName("tr");
+
+  for (let i = 1; i < rows.length; i++) {
+    const rowText = rows[i].innerText.toLowerCase();
+    rows[i].style.display = rowText.includes(filter) ? "" : "none";
+  }
+}
+</script>
+<div id="ordersModal" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.6);
+  z-index:10000;
+">
+
+  <div style="
+    background:#fff;
+    max-width:900px;
+    margin:60px auto;
+    padding:20px;
+    border-radius:8px;
+    position:relative;
+  ">
+    <h3>Subscription Orders</h3>
+
+    <button onclick="closeOrdersModal()"
+      style="position:absolute; top:10px; right:10px;">
+      ✕
+    </button>
+
+    <table style="margin-top:15px;">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Shopify Order ID</th>
+          <th>Shipping Date</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="ordersTableBody">
+        <tr><td colspan="5">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+async function openOrdersModal(subscriptionId) {
+  document.getElementById("ordersModal").style.display = "block";
+  const tbody = document.getElementById("ordersTableBody");
+
+  tbody.innerHTML = `<tr><td colspan="5">Loading…</td></tr>`;
+
+  const res = await fetch(`/admin/subscription/${subscriptionId}/orders`);
+  const orders = await res.json();
+
+  if (!orders.length) {
+    tbody.innerHTML = `<tr><td colspan="5">No orders found</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = orders.map(o => `
+    <tr>
+      <td>${o.product}</td>
+      <td>
+        ${o.shopifyOrderId
+          ? `${o.shopifyOrderId}`
+          : "-"}
+      </td>
+      <td>${new Date(o.shippingDate).toDateString()}</td>
+      <td><strong>${o.status}</strong></td>
+      <td>${new Date(o.createdAt).toDateString()}</td>
+    </tr>
+  `).join("");
+}
+
+function closeOrdersModal() {
+  document.getElementById("ordersModal").style.display = "none";
+}
+</script>
+<script>
+function togglePassword(btn) {
+  const span = btn.previousElementSibling;
+  const realPassword = span.getAttribute("data-password");
+
+  if (span.innerText.includes("•")) {
+    span.innerText = realPassword;
+    btn.innerText = "Hide";
+  } else {
+    span.innerText = "••••••••";
+    btn.innerText = "Show";
+  }
+}
+</script>
+<div id="addressModal" style="
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+">
+  <div style="
+    background:#fff;
+    padding:20px;
+    border-radius:8px;
+    width:400px;
+    max-width:90%;
+  ">
+    <h3 style="margin-top:0;">Customer Address</h3>
+
+    <div id="addressContent" style="line-height:1.6;"></div>
+
+    <div style="text-align:right; margin-top:15px;">
+      <button onclick="closeAddress()">Close</button>
+    </div>
+  </div>
+</div>
+<script>
+function showAddress(address) {
+  let html = "";
+
+  if (address.line1) html += `<div><b>Line 1:</b> ${address.line1}</div>`;
+  if (address.line2) html += `<div><b>Line 2:</b> ${address.line2}</div>`;
+  if (address.city) html += `<div><b>City:</b> ${address.city}</div>`;
+  if (address.state) html += `<div><b>State:</b> ${address.state}</div>`;
+  if (address.pincode) html += `<div><b>Pincode:</b> ${address.pincode}</div>`;
+  if (address.country) html += `<div><b>Country:</b> ${address.country}</div>`;
+
+  document.getElementById("addressContent").innerHTML = html || "No address found";
+  document.getElementById("addressModal").style.display = "flex";
+}
+
+function closeAddress() {
+  document.getElementById("addressModal").style.display = "none";
+}
+</script>
 
 </body>
 </html>
