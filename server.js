@@ -38,6 +38,49 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_SECRET,
 });
 
+// app.get("/api/delivery-fee-eligibility", async (req, res) => {
+//   try {
+//     const { email, period } = req.query;
+
+//     if (!email || !period) {
+//       return res.status(400).json({ error: "Email and period required" });
+//     }
+
+//     const customer = await prisma.customer.findUnique({
+//       where: { email },
+//       include: {
+//         subscriptions: {
+//           where: {
+//             status: { in: ["active", "stopped"] },
+//           },
+//         },
+//       },
+//     });
+
+//     if (!customer) {
+//       return res.json({
+//         freeDelivery: false,
+//         deliveryFee: 60 * Number(period),
+//         reason: "Customer not found",
+//       });
+//     }
+
+//     // ✅ CORE RULE: ANY subscription ≥ 5000
+//     const hasFreeDelivery = customer.subscriptions.some(
+//       (sub) => Number(sub.totalAmount) >= 5000
+//     );
+
+//     const deliveryFee = hasFreeDelivery ? 0 : 60 * Number(period);
+
+//     res.json({
+//       freeDelivery: hasFreeDelivery,
+//       deliveryFee,
+//     });
+//   } catch (err) {
+//     console.error("Delivery fee check failed:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
 // Admin routes
 
@@ -407,7 +450,6 @@ app.post("/create-subscription", async (req, res) => {
       period,
       deliveryDays, // ["Mon","Thu"]
       totalAmount,
-      deliveryFee,
       address
     } = req.body;
 
@@ -441,24 +483,56 @@ app.post("/create-subscription", async (req, res) => {
         },
       });
     }
+// ===============================
+// 🔍 Check delivery fee eligibility
+// ===============================
+let finalDeliveryFee = 0;
+
+// fetch active + stopped subscriptions
+const previousSubs = await prisma.subscription.findMany({
+  where: {
+    customerId: dbCustomer.id,
+    status: { in: ["active", "stopped"] },
+  },
+  select: {
+    totalAmount: true,
+  },
+});
+
+// condition 1: any previous subscription above 5000
+const hasHighValueSub = previousSubs.some(
+  (sub) => sub.totalAmount > 5000
+);
+
+// condition 2: current subscription total above 5000
+const currentIsHighValue = totalAmount > 5000;
+
+// final rule
+if (!hasHighValueSub && !currentIsHighValue) {
+  finalDeliveryFee = 60 * period;
+}
+
 
     // ===============================
     // 2️⃣ Create Razorpay Order
     // ===============================
-    const order = await razorpay.orders.create({
-      amount: Math.round(totalAmount * 100),
-      currency: "INR",
-      receipt: `rcpt_${Date.now()}`,
-      notes: {
-        product,
-        frequency: frequency.toString(),
-        quantity: quantity.toString(),
-        period: period.toString(),
-        deliveryDays: deliveryDays?.join(",") || "",
-        totalAmount: totalAmount.toString(),
-        deliveryFee: deliveryFee.toString(),
-      },
-    });
+    const finalPayableAmount = totalAmount + finalDeliveryFee;
+
+const order = await razorpay.orders.create({
+  amount: Math.round(finalPayableAmount * 100),
+  currency: "INR",
+  receipt: `rcpt_${Date.now()}`,
+  notes: {
+    product,
+    frequency: frequency.toString(),
+    quantity: quantity.toString(),
+    period: period.toString(),
+    deliveryDays: deliveryDays?.join(",") || "",
+    baseAmount: totalAmount.toString(),
+    deliveryFee: finalDeliveryFee.toString(),
+  },
+});
+
 
     // ===============================
     // 3️⃣ Calculate subscriptionEndDate
@@ -491,13 +565,13 @@ app.post("/create-subscription", async (req, res) => {
   data: {
     razorpayOrderId: order.id,
     product,
-    variantId, // ✅ store it
+    variantId,
     frequency: frequency.toString(),
     quantity,
     period,
     deliveryDays: deliveryDays.join(","),
     totalAmount,
-    deliveryFee,
+    deliveryFee: finalDeliveryFee, // ✅ correct fee
     status: "pending",
     customerId: dbCustomer.id,
     isOneTimePurchase: false,
@@ -506,6 +580,7 @@ app.post("/create-subscription", async (req, res) => {
     address: address || null,
   },
 });
+
 
 
     res.json({

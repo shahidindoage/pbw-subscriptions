@@ -93,49 +93,72 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
       // ===============================
       const addr = sub.address || {};
 
-      const shopifyOrderData = {
-        order: {
-          line_items: [
-            {
-              variant_id: sub.variantId || 0,
-              quantity: sub.quantity,
-            },
-          ],
-          customer: {
-            first_name: addr.name?.split(" ")[0] || "Customer",
-            last_name: addr.name?.split(" ")[1] || "",
-            email: sub.customer.email,
-          },
-          financial_status: "paid",
-          fulfillment_status: "unfulfilled",
-          note: `Subscription order (${sub.product})`,
-          note_attributes: [
-            { name: "SubscriptionId", value: sub.id },
-            { name: "ShippingDate", value: shippingDate.toISOString() },
-            { name: "Frequency", value: sub.frequency },
-          ],
-          shipping_address: {
-            first_name: addr.name || "Customer",
-            address1: addr.line1 || "",
-            address2: addr.line2 || "",
-            city: addr.city || "",
-            province: addr.state || "",
-            zip: addr.pincode || "",
-            phone: addr.phone || sub.customer.contact || "",
-            country: "India",
-          },
-          billing_address: {
-            first_name: addr.name || "Customer",
-            address1: addr.line1 || "",
-            address2: addr.line2 || "",
-            city: addr.city || "",
-            province: addr.state || "",
-            zip: addr.pincode || "",
-            phone: addr.phone || sub.customer.contact || "",
-            country: "India",
-          },
-        },
-      };
+      const fullName = addr.name || "Customer";
+const [firstName, ...rest] = fullName.split(" ");
+const lastName = rest.join(" ") || " ";
+
+const shopifyOrderData = {
+  order: {
+    line_items: [
+      {
+        variant_id: sub.variantId || 0,
+        quantity: sub.quantity,
+      },
+    ],
+
+    customer: {
+      first_name: firstName,
+      last_name: lastName,
+      email: sub.customer.email,
+    },
+
+    financial_status: "paid",
+    fulfillment_status: "unfulfilled",
+
+    note: `Subscription order (${sub.product})`,
+    note_attributes: [
+      { name: "SubscriptionId", value: sub.id },
+      { name: "ShippingDate", value: shippingDate.toISOString() },
+      { name: "Frequency", value: sub.frequency },
+    ],
+
+    shipping_address: {
+      first_name: firstName,
+      last_name: lastName,                // ✅ REQUIRED
+      address1: addr.line1 || "",
+      address2: addr.line2 || "",
+      city: addr.city || "",
+      province: addr.state || "",
+      province_code: addr.stateCode || "DL", // ✅ REQUIRED
+      zip: addr.pincode || "",
+      country: "India",
+      country_code: "IN",                 // ✅ REQUIRED
+      phone: addr.phone || sub.customer.contact || "9999999999",
+    },
+
+    billing_address: {
+      first_name: firstName,
+      last_name: lastName,
+      address1: addr.line1 || "",
+      address2: addr.line2 || "",
+      city: addr.city || "",
+      province: addr.state || "",
+      province_code: addr.stateCode || "DL",
+      zip: addr.pincode || "",
+      country: "India",
+      country_code: "IN",
+      phone: addr.phone || sub.customer.contact || "9999999999",
+    },
+
+    send_receipt: false,
+    send_fulfillment_receipt: false,
+  },
+};
+
+console.log(
+  "📦 Shopify Order Payload:",
+  JSON.stringify(shopifyOrderData, null, 2)
+);
 
       const shopifyRes = await createShopifyOrder(shopifyOrderData);
       const shopifyOrderId = shopifyRes?.order?.id?.toString() || null;
