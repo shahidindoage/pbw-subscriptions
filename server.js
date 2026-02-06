@@ -12,7 +12,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
 import { sendWelcomeEmail } from "./utils/email.js";
-
+import { sendEmail } from "../utils/email.js";
 
 dotenv.config();
 
@@ -339,6 +339,7 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
 
     const sub = await prisma.subscription.findUnique({
       where: { id },
+      include: { customer: true },
     });
 
     if (!sub) {
@@ -359,6 +360,23 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
       },
     });
 
+
+     // 🔔 Send "Subscription Stopped" email
+    try {
+      await sendEmail({
+        to: sub.customer.email,
+        subject: "Your Subscription is Paused",
+        html: `
+          <h2>Hi ${sub.customer.name},</h2>
+          <p>Your subscription for <strong>${sub.product}</strong> has been paused successfully.</p>
+          <p>You can resume it anytime from your dashboard.</p>
+          <p>— Team</p>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send stop subscription email:", err);
+    }
+
     res.redirect(
       "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
     );
@@ -377,6 +395,7 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
 
     const sub = await prisma.subscription.findUnique({
       where: { id },
+      include: { customer: true }, 
     });
 
     if (!sub || !sub.pausedAt) {
@@ -418,6 +437,22 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
         subscriptionEndDate: newEndDate,
       },
     });
+
+    // 🔔 Send "Subscription Resumed" email
+    try {
+      await sendEmail({
+        to: sub.customer.email,
+        subject: "Your Subscription is Resumed",
+        html: `
+          <h2>Hi ${sub.customer.name},</h2>
+          <p>Your subscription for <strong>${sub.product}</strong> is now active again.</p>
+          <p>Next delivery: ${newNextShippingDate.toDateString()}</p>
+          <p>— Team</p>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send resume subscription email:", err);
+    }
 
     console.log("▶️ Subscription resumed:", {
       pausedDays,
