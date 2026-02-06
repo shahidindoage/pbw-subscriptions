@@ -11,7 +11,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import "./cron/runCron.js"
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
-import { sendWelcomeEmail } from "./utils/email.js";
+import { sendEmail } from "./utils/email.js"; 
 
 
 dotenv.config();
@@ -351,13 +351,25 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
       );
     }
 
-    await prisma.subscription.update({
+    const updatedSub = await prisma.subscription.update({
       where: { id },
       data: {
         status: "stopped",
         pausedAt: new Date(),
       },
     });
+
+     // ✅ Send 'stopped' email
+    try {
+      await sendEmail({
+        customer: sub.customer,
+        subscription: updatedSub,
+        type: "stopped"
+      });
+    } catch (err) {
+      console.error("Failed to send subscription stopped email:", err);
+    }
+
 
     res.redirect(
       "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
@@ -408,8 +420,8 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
       newNextShippingDate = addDays(newNextShippingDate, 1);
     }
 
-    // 5️⃣ Update subscription
-    await prisma.subscription.update({
+      // 5️⃣ Update subscription
+    const updatedSub = await prisma.subscription.update({
       where: { id },
       data: {
         status: "active",
@@ -418,6 +430,17 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
         subscriptionEndDate: newEndDate,
       },
     });
+
+    // ✅ Send 'resumed' email
+    try {
+      await sendEmail({
+        customer: sub.customer,
+        subscription: updatedSub,
+        type: "resumed"
+      });
+    } catch (err) {
+      console.error("Failed to send subscription resumed email:", err);
+    }
 
     console.log("▶️ Subscription resumed:", {
       pausedDays,
@@ -650,12 +673,18 @@ const order = await razorpay.orders.create({
   },
 });
 
-// 6️⃣ Send Welcome Email
-try {
-  await sendWelcomeEmail(dbCustomer, sub);
-} catch (err) {
-  console.error("Failed to send welcome email:", err);
-}
+// ===============================
+    // 6️⃣ Send Welcome Email (Reusable)
+    // ===============================
+    try {
+      await sendEmail({
+        customer: dbCustomer,
+        subscription: sub,
+        type: "welcome"
+      });
+    } catch (err) {
+      console.error("Failed to send welcome email:", err);
+    }
 
     res.json({
       order,
