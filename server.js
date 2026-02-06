@@ -13,6 +13,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 import cronRoutes from "./routes/cron.js";
 import { sendWelcomeEmail } from "./utils/email.js";
 import { sendEmail } from "./utils/email.js";
+import { addDays, nextDay, differenceInHours  } from "date-fns"; // npm i date-fns
 
 dotenv.config();
 
@@ -342,26 +343,42 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
       include: { customer: true },
     });
 
-    if (!sub) {
-      return res.status(404).send("Subscription not found");
-    }
+    if (!sub) return res.status(404).send("Subscription not found");
 
+    // ✅ Already paused
     if (sub.pausedAt) {
       return res.redirect(
         "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
       );
     }
 
+    // ✅ Check nextShippingDate exists
+    if (!sub.nextShippingDate) {
+      return res.status(400).send("Subscription has no upcoming delivery");
+    }
+
+    const now = new Date();
+    const hoursToNext = differenceInHours(sub.nextShippingDate, now);
+
+    // ✅ Cannot pause within 24 hours of delivery
+    if (hoursToNext <= 24) {
+      return res
+        .status(400)
+        .send("Cannot pause subscription within 24 hours of next delivery");
+    }
+
+    // ✅ Pause subscription
+    const pausedAt = now > sub.nextShippingDate ? sub.nextShippingDate : now;
+
     await prisma.subscription.update({
       where: { id },
       data: {
         status: "stopped",
-        pausedAt: new Date(),
+        pausedAt,
       },
     });
 
-
-     // 🔔 Send "Subscription Stopped" email
+    // 🔔 Send stop email
     try {
       await sendEmail({
         to: sub.customer.email,
@@ -386,19 +403,22 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
   }
 });
 
-
-
-
+// =========================
+// Resume Subscription
+// =========================
 app.post("/customer/subscription/:id/resume", async (req, res) => {
   try {
     const { id } = req.params;
 
     const sub = await prisma.subscription.findUnique({
       where: { id },
-      include: { customer: true }, 
+      include: { customer: true },
     });
 
-    if (!sub || !sub.pausedAt) {
+    if (!sub) return res.status(404).send("Subscription not found");
+
+    // ✅ Only resume if paused
+    if (!sub.pausedAt) {
       return res.redirect(
         "/customer/dashboard?email=" + encodeURIComponent(req.query.email)
       );
@@ -406,28 +426,33 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
 
     const now = new Date();
 
-    // 1️⃣ Calculate paused days
-    const pausedMs = now.getTime() - sub.pausedAt.getTime();
-    const pausedDays = Math.ceil(pausedMs / (1000 * 60 * 60 * 24));
+    // ✅ Calculate paused days safely
+    let pausedMs = now.getTime() - sub.pausedAt.getTime();
+    const pausedDays = Math.max(0, Math.ceil(pausedMs / (1000 * 60 * 60 * 24)));
 
-    // 2️⃣ Extend end date
+    // ✅ Extend end date
     const newEndDate = addDays(sub.subscriptionEndDate, pausedDays);
 
-    // 3️⃣ Shift next shipping date
+    // ✅ Shift nextShippingDate
     let newNextShippingDate = addDays(sub.nextShippingDate, pausedDays);
 
-    // 4️⃣ Align with delivery days
-    const deliveryDays = sub.deliveryDays.split(",");
+    // ✅ Align with delivery days
+    const deliveryDays = sub.deliveryDays?.split(",") || [];
     const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
 
+    if (deliveryDays.length === 0) {
+      return res.status(400).send("Subscription has no delivery days set");
+    }
+
     for (let i = 0; i < 14; i++) {
-      if (deliveryDays.some(d => dayMap[d] === newNextShippingDate.getDay())) {
-        break;
-      }
+      if (deliveryDays.some(d => dayMap[d] === newNextShippingDate.getDay())) break;
       newNextShippingDate = addDays(newNextShippingDate, 1);
     }
 
-    // 5️⃣ Update subscription
+    // ✅ Ensure nextShippingDate >= today
+    if (newNextShippingDate < now) newNextShippingDate = now;
+
+    // ✅ Update subscription
     await prisma.subscription.update({
       where: { id },
       data: {
@@ -438,7 +463,7 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
       },
     });
 
-    // 🔔 Send "Subscription Resumed" email
+    // 🔔 Send resume email
     try {
       await sendEmail({
         to: sub.customer.email,
@@ -539,7 +564,7 @@ return res.json({ exists: false });
 });
 
 // ===== Create Subscription (Normal Razorpay Payment) =====
-import { addDays, nextDay } from "date-fns"; // npm i date-fns
+
 
 app.post("/create-subscription", async (req, res) => {
   try {

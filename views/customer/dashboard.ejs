@@ -180,21 +180,60 @@
   <% } %>
 </div>
 <script>
-  const loader = document.getElementById("loaderOverlay");
+const loader = document.getElementById("loaderOverlay");
 
-  document.querySelectorAll("form").forEach(form => {
-    form.addEventListener("submit", () => {
-      loader.style.display = "flex";
+document.querySelectorAll("form").forEach(form => {
+  form.addEventListener("submit", (e) => {
+    const action = form.action;
 
-      // Disable all buttons to avoid double click
-      document.querySelectorAll("button").forEach(btn => {
-        btn.disabled = true;
-        btn.style.opacity = "0.6";
-        btn.style.cursor = "not-allowed";
-      });
+    // ================= Stop Subscription Check =================
+    if (action.includes("/stop")) {
+      const row = form.closest("tr");
+      const nextShippingCell = row.querySelector("td:nth-child(6)"); // Next Shipping column
+      const nextShippingText = nextShippingCell.textContent.trim();
+
+      if (nextShippingText && nextShippingText !== "-") {
+        const nextDate = new Date(nextShippingText);
+        const now = new Date();
+        const diffHours = (nextDate - now) / (1000 * 60 * 60);
+
+        if (diffHours <= 24) {
+          e.preventDefault(); // stop form submit
+          alert("⛔ Cannot stop subscription within 24 hours of next delivery.");
+          return;
+        }
+      }
+    }
+
+    // ================= Resume Subscription Check =================
+    if (action.includes("/resume")) {
+      const row = form.closest("tr");
+      const nextShippingCell = row.querySelector("td:nth-child(6)"); // Next Shipping column
+      const nextShippingText = nextShippingCell.textContent.trim();
+
+      if (nextShippingText && nextShippingText !== "-") {
+        const nextDate = new Date(nextShippingText);
+        const now = new Date();
+        const diffHours = (nextDate - now) / (1000 * 60 * 60);
+
+        // optional: prevent resuming if next shipping is in past or already today
+        if (diffHours <= 1) {
+          e.preventDefault();
+          alert("⛔ Cannot resume subscription immediately before next delivery.");
+          return;
+        }
+      }
+    }
+
+    // ================= Show Loader and Disable Buttons =================
+    loader.style.display = "flex";
+    document.querySelectorAll("button").forEach(btn => {
+      btn.disabled = true;
+      btn.style.opacity = "0.6";
+      btn.style.cursor = "not-allowed";
     });
   });
-
+});
 
 function openOrdersModal(subscriptionId) {
   const modal = document.getElementById("ordersModal");
@@ -215,11 +254,10 @@ function openOrdersModal(subscriptionId) {
       data.orders.forEach(order => {
         tbody.innerHTML += `
           <tr>
-              <td>${order.subscription?.product || "-"}</td>
+            <td>${order.subscription?.product || "-"}</td>
             <td>${order.shopifyOrderId || "-"}</td>
             <td>${new Date(order.shippingDate).toDateString()}</td>
             <td>${order.status}</td>
-            
           </tr>
         `;
       });
@@ -232,8 +270,8 @@ function openOrdersModal(subscriptionId) {
 function closeOrdersModal() {
   document.getElementById("ordersModal").style.display = "none";
 }
-
 </script>
+
 <div id="ordersModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000;">
   <div style="background:#fff; max-width:800px; margin:60px auto; padding:20px; border-radius:8px; position:relative;">
     <h3>Subscription Orders</h3>
