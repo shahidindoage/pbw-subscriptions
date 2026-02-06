@@ -12,7 +12,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
 import { sendWelcomeEmail } from "./utils/email.js";
-import { sendEmail } from "../utils/email.js";
+import { sendEmail } from "./utils/email.js";
 
 dotenv.config();
 
