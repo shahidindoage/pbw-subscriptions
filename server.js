@@ -339,6 +339,7 @@ app.post("/customer/subscription/:id/stop", async (req, res) => {
 
     const sub = await prisma.subscription.findUnique({
       where: { id },
+      include: { customer: true }, // include customer
     });
 
     if (!sub) {
@@ -389,6 +390,7 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
 
     const sub = await prisma.subscription.findUnique({
       where: { id },
+      include: { customer: true }, // include customer
     });
 
     if (!sub || !sub.pausedAt) {
