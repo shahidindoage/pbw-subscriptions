@@ -11,7 +11,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import "./cron/runCron.js"
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
-import { sendWelcomeEmail } from "./utils/email.js";
+import { getOrderStatusEmail, sendWelcomeEmail } from "./utils/email.js";
 import { sendEmail } from "./utils/email.js";
 import { addDays, nextDay, differenceInHours  } from "date-fns"; // npm i date-fns
 
@@ -41,49 +41,6 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_SECRET,
 });
 
-// app.get("/api/delivery-fee-eligibility", async (req, res) => {
-//   try {
-//     const { email, period } = req.query;
-
-//     if (!email || !period) {
-//       return res.status(400).json({ error: "Email and period required" });
-//     }
-
-//     const customer = await prisma.customer.findUnique({
-//       where: { email },
-//       include: {
-//         subscriptions: {
-//           where: {
-//             status: { in: ["active", "stopped"] },
-//           },
-//         },
-//       },
-//     });
-
-//     if (!customer) {
-//       return res.json({
-//         freeDelivery: false,
-//         deliveryFee: 60 * Number(period),
-//         reason: "Customer not found",
-//       });
-//     }
-
-//     // ✅ CORE RULE: ANY subscription ≥ 5000
-//     const hasFreeDelivery = customer.subscriptions.some(
-//       (sub) => Number(sub.totalAmount) >= 5000
-//     );
-
-//     const deliveryFee = hasFreeDelivery ? 0 : 60 * Number(period);
-
-//     res.json({
-//       freeDelivery: hasFreeDelivery,
-//       deliveryFee,
-//     });
-//   } catch (err) {
-//     console.error("Delivery fee check failed:", err);
-//     res.status(500).json({ error: "Server error" });
-//   }
-// });
 
 // Admin routes
 
@@ -150,14 +107,60 @@ app.post("/admin/shopify-order/:id/status", isAdmin, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
+  // 1️⃣ Get order with relations
+  const order = await prisma.shopifyOrder.findUnique({
+    where: { id },
+    include: {
+      subscription: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    return res.status(404).send("Order not found");
+  }
+
+  // ⛔ Prevent duplicate email if same status selected again
+  if (order.status === status) {
+    return  res.redirect("/admin/dashboard?page=shopify-orders");
+  }
+
+  // 2️⃣ Update status
   await prisma.shopifyOrder.update({
     where: { id },
     data: { status },
   });
 
-  // ✅ redirect back to Shopify Orders tab
-  res.redirect("/admin/dashboard?page=shopify-orders");
+  // 3️⃣ Send email (if applicable)
+  try {
+    const emailData = getOrderStatusEmail({
+      status,
+      customerName: order.subscription.customer.name || "there",
+      product: order.subscription.product,
+      orderNumber: order.order_number,
+      shippingDate: order.shippingDate,
+      orderLink: `https://pbwfoods.com/account/orders/${order.order_status_url}`,
+    });
+
+    if (emailData) {
+      await sendEmail({
+        to: order.subscription.customer.email,
+        subject: emailData.subject,
+        html: emailData.html,
+      });
+
+      console.log(`📧 Status email sent: ${status}`);
+    }
+  } catch (err) {
+    console.error("❌ Failed to send status email:", err);
+  }
+
+   res.redirect("/admin/dashboard?page=shopify-orders");
 });
+
 app.get("/admin/subscription/:id/orders", isAdmin, async (req, res) => {
   const orders = await prisma.shopifyOrder.findMany({
     where: { subscriptionId: req.params.id },
@@ -290,7 +293,7 @@ app.get("/customer/dashboard", async (req, res) => {
   include: {
     subscriptions: {
       orderBy: { createdAt: "desc" },
-      where: { status: { in: ["active", "stopped"] } }, // include stopped too
+      where: { status: { in: ["active", "stopped","cancelled"] } }, // include stopped too
     },
   },
 });
@@ -573,11 +576,11 @@ app.post("/create-subscription", async (req, res) => {
       email,
       contact,
       product,
-      variantId, // (kept, not used here)
+      variantId,
       frequency,
       quantity,
       period,
-      deliveryDays, // ["Mon","Thu"]
+      deliveryDays, // ["Mon","Wed"]
       totalAmount,
       address
     } = req.body;
@@ -598,7 +601,7 @@ app.post("/create-subscription", async (req, res) => {
           contact: contact || null,
           razorpayId: rzCustomer.id,
           password: randomPassword,
-          address: address || null, // ✅ store default address
+          address: address || null,
         },
       });
     } else {
@@ -608,114 +611,216 @@ app.post("/create-subscription", async (req, res) => {
           razorpayId: dbCustomer.razorpayId || rzCustomer.id,
           name,
           contact: contact || null,
-          address: address || dbCustomer.address, // ✅ update last-used address
+          address: address || dbCustomer.address,
         },
       });
     }
-// ===============================
-// 🔍 Check delivery fee eligibility
-// ===============================
-let finalDeliveryFee = 0;
 
-// fetch active + stopped subscriptions
-const previousSubs = await prisma.subscription.findMany({
-  where: {
-    customerId: dbCustomer.id,
-    status: { in: ["active", "stopped"] },
-  },
-  select: {
-    totalAmount: true,
-  },
-});
-
-// condition 1: any previous subscription above 5000
-const hasHighValueSub = previousSubs.some(
-  (sub) => sub.totalAmount > 5000
-);
-
-// condition 2: current subscription total above 5000
-const currentIsHighValue = totalAmount > 5000;
-
-// final rule
-if (!hasHighValueSub && !currentIsHighValue) {
-  finalDeliveryFee = 60 * period;
-}
-
+    // ===============================
+    // 🔍 Delivery fee eligibility
+    // ===============================
+    let finalDeliveryFee = 0;
+    const previousSubs = await prisma.subscription.findMany({
+      where: {
+        customerId: dbCustomer.id,
+        status: { in: ["active", "stopped"] },
+      },
+      select: { totalAmount: true },
+    });
+    const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
+    const currentIsHighValue = totalAmount > 5000;
+    if (!hasHighValueSub && !currentIsHighValue) finalDeliveryFee = 60 * period;
 
     // ===============================
     // 2️⃣ Create Razorpay Order
     // ===============================
     const finalPayableAmount = totalAmount + finalDeliveryFee;
-
-const order = await razorpay.orders.create({
-  amount: Math.round(finalPayableAmount * 100),
-  currency: "INR",
-  receipt: `rcpt_${Date.now()}`,
-  notes: {
-    product,
-    frequency: frequency.toString(),
-    quantity: quantity.toString(),
-    period: period.toString(),
-    deliveryDays: deliveryDays?.join(",") || "",
-    baseAmount: totalAmount.toString(),
-    deliveryFee: finalDeliveryFee.toString(),
-  },
-});
-
+    const order = await razorpay.orders.create({
+      amount: Math.round(finalPayableAmount * 100),
+      currency: "INR",
+      receipt: `rcpt_${Date.now()}`,
+      notes: {
+        product,
+        frequency: frequency.toString(),
+        quantity: quantity.toString(),
+        period: period.toString(),
+        deliveryDays: deliveryDays.join(","),
+        baseAmount: totalAmount.toString(),
+        deliveryFee: finalDeliveryFee.toString(),
+      },
+    });
 
     // ===============================
-    // 3️⃣ Calculate subscriptionEndDate
+    // 3️⃣ Cut-off logic + first nextShippingDate
     // ===============================
     const now = new Date();
-    const subscriptionEndDate = addDays(now, period * 7);
+    
 
-    // ===============================
-    // 4️⃣ Calculate first nextShippingDate
-    // ===============================
     const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
-    let nextShippingDate = null;
+    const todayDay = now.getDay();
+    const cutoff = new Date(now);
+    cutoff.setHours(11, 0, 0, 0);
 
-    for (let i = 1; i <= 7; i++) {
-      const candidate = addDays(now, i);
-      if (deliveryDays.some(d => dayMap[d] === candidate.getDay())) {
-        nextShippingDate = candidate;
-        break;
-      }
-    }
+// 🔒 Minimum allowed shipping datetime (24 hours rule)
+const minShippingTime = addDays(now, 1);
 
-    if (!nextShippingDate) {
-      return res.status(400).json({ error: "Invalid delivery days" });
-    }
+let nextShippingDate = null;
 
-    // ===============================
-    // 5️⃣ Store subscription (NO Shopify order here ❌)
-    // ===============================
-   const sub = await prisma.subscription.create({
-  data: {
-    razorpayOrderId: order.id,
-    product,
-    variantId,
-    frequency: frequency.toString(),
-    quantity,
-    period,
-    deliveryDays: deliveryDays.join(","),
-    totalAmount,
-    deliveryFee: finalDeliveryFee, // ✅ correct fee
-    status: "pending",
-    customerId: dbCustomer.id,
-    isOneTimePurchase: false,
-    subscriptionEndDate,
-    nextShippingDate,
-    address: address || null,
-  },
-});
+for (let i = 0; i <= 14; i++) {
+  const candidate = addDays(now, i);
+  const candidateDay = candidate.getDay();
 
-// 6️⃣ Send Welcome Email
-try {
-  await sendWelcomeEmail(dbCustomer, sub);
-} catch (err) {
-  console.error("Failed to send welcome email:", err);
+  // 1️⃣ Must be a delivery day
+  if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
+
+  // 2️⃣ Shipping always at 11:00 AM
+  candidate.setHours(11, 0, 0, 0);
+
+  // 3️⃣ Enforce minimum 24-hour gap
+  if (candidate < minShippingTime) continue;
+
+  // 4️⃣ Sunday rule:
+  // If purchased on Sunday, skip ONLY Monday
+  if (todayDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
+    continue;
+  }
+
+  // 5️⃣ Cut-off rule (same-day delivery)
+  if (candidateDay === todayDay && now >= cutoff) {
+    continue;
+  }
+
+  // ✅ First valid date wins
+  nextShippingDate = candidate;
+  break;
 }
+
+if (!nextShippingDate) {
+  throw new Error("No valid next shipping date found");
+}
+
+
+//     const todayDay = now.getDay();
+// const isTodayDelivery = deliveryDays.some(d => dayMap[d] === todayDay);
+// const isSunday = todayDay === dayMap["Sun"];
+
+// let nextShippingDate = null;
+// let skippedMondayOnSunday = false;
+
+// for (let i = 0; i <= 14; i++) {
+//   const candidate = addDays(now, i);
+//   const candidateDay = candidate.getDay();
+
+//   if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
+
+//   // ✅ SUNDAY RULE: skip ONLY Monday
+//   if (
+//     isSunday &&
+//     candidateDay === dayMap["Mon"] &&
+//     !skippedMondayOnSunday
+//   ) {
+//     skippedMondayOnSunday = true;
+//     continue;
+//   }
+
+//   // ✅ Delivery-day cut-off rule
+//   if (isTodayDelivery && now >= cutoff && candidateDay === todayDay) {
+//     continue;
+//   }
+
+//   candidate.setHours(11, 0, 0, 0);
+//   nextShippingDate = candidate;
+//   break;
+// }
+
+  //   const todayDay = now.getDay();
+  //   const isTodayDelivery = deliveryDays.some(d => dayMap[d] === todayDay);
+  //   let nextShippingDate = null;
+  //   let skippedOnce = false;
+
+  //   for (let i = 0; i <= 14; i++) {
+  //     const candidate = addDays(now, i);
+
+  //     if (!deliveryDays.some(d => dayMap[d] === candidate.getDay())) continue;
+
+  //      // ⛔ Skip first eligible day if purchase on non-delivery day, except Sunday
+  // if (!isTodayDelivery && !skippedOnce && candidate.getDay() !== dayMap["Sun"]) {
+  //   skippedOnce = true;
+  //   continue;
+  // }
+
+  //     // ⛔ Skip first eligible day if purchase on delivery day after 11 AM
+  //     if (isTodayDelivery && now >= cutoff && !skippedOnce) {
+  //       skippedOnce = true;
+  //       continue;
+  //     }
+
+  //     candidate.setHours(11, 0, 0, 0);
+  //     nextShippingDate = candidate;
+  //     break;
+  //   }
+// let nextShippingDate = null;
+// let skipFirstEligible = now >= cutoff; // 👈 only cutoff decides skip
+
+// for (let i = 0; i <= 14; i++) {
+//   const candidate = addDays(now, i);
+
+//   // must be a delivery day
+//   if (!deliveryDays.some(d => dayMap[d] === candidate.getDay())) continue;
+
+//   // skip first eligible if after cutoff
+//   if (skipFirstEligible) {
+//     skipFirstEligible = false;
+//     continue;
+//   }
+
+//   candidate.setHours(11, 0, 0, 0);
+//   nextShippingDate = candidate;
+//   break;
+// }
+
+    // if (!nextShippingDate) {
+    //   return res.status(400).json({ error: "Invalid delivery days" });
+    // }
+
+    // ===============================
+    // 4️⃣ Correct subscriptionEndDate
+    // ===============================
+    const subscriptionEndDate = addDays(nextShippingDate, period * 7);
+    const createdAt = now;
+
+    // ===============================
+    // 5️⃣ Store subscription
+    // ===============================
+    const sub = await prisma.subscription.create({
+      data: {
+        razorpayOrderId: order.id,
+        product,
+        variantId,
+        frequency: frequency.toString(),
+        quantity,
+        period,
+        deliveryDays: deliveryDays.join(","),
+        totalAmount,
+        deliveryFee: finalDeliveryFee,
+        status: "pending",
+        customerId: dbCustomer.id,
+        isOneTimePurchase: false,
+        subscriptionEndDate,
+        createdAt,  
+        nextShippingDate,
+        address: address || null,
+      },
+    });
+
+    // ===============================
+    // 6️⃣ Welcome Email
+    // ===============================
+    try {
+      await sendWelcomeEmail(dbCustomer, sub);
+    } catch (err) {
+      console.error("Failed to send welcome email:", err);
+    }
 
     res.json({
       order,
@@ -728,6 +833,9 @@ try {
     res.status(500).json({ error: "Subscription creation failed" });
   }
 });
+
+
+
 
 
 app.post("/verify-payment", async (req, res) => {
