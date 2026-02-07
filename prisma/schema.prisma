@@ -71,6 +71,10 @@ model ShopifyOrder {
   subscriptionId String
   shippingDate   DateTime
   shopifyOrderId String?
+
+  order_number      String?   // PBW6481
+  order_status_url  String?   // https://pbwfoods.com/account/orders/xxxx
+
   status         String
 
   shippingAddress Json?
