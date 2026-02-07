@@ -568,6 +568,11 @@ return res.json({ exists: false });
 
 // ===== Create Subscription (Normal Razorpay Payment) =====
 
+function ist11AMToUTC(date) {
+  const d = new Date(date);
+  d.setHours(11, 0, 0, 0);        // 11:00 AM IST (logical)
+  return new Date(d.getTime() - (5.5 * 60 * 60 * 1000)); // IST → UTC
+}
 
 app.post("/create-subscription", async (req, res) => {
   try {
@@ -670,30 +675,28 @@ for (let i = 0; i <= 14; i++) {
   const candidate = addDays(now, i);
   const candidateDay = candidate.getDay();
 
-  // 1️⃣ Must be a delivery day
+  // must be a delivery day
   if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
 
-  // 2️⃣ Shipping always at 11:00 AM
-  candidate.setHours(11, 0, 0, 0);
+  const shippingUTC = ist11AMToUTC(candidate);
 
-  // 3️⃣ Enforce minimum 24-hour gap
-  if (candidate < minShippingTime) continue;
+  // 24-hour rule
+  if (shippingUTC < minShippingTime) continue;
 
-  // 4️⃣ Sunday rule:
-  // If purchased on Sunday, skip ONLY Monday
+  // Sunday rule: skip Monday
   if (todayDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
     continue;
   }
 
-  // 5️⃣ Cut-off rule (same-day delivery)
+  // same-day cutoff rule
   if (candidateDay === todayDay && now >= cutoff) {
     continue;
   }
 
-  // ✅ First valid date wins
-  nextShippingDate = candidate;
+  nextShippingDate = shippingUTC;
   break;
 }
+
 
 if (!nextShippingDate) {
   throw new Error("No valid next shipping date found");
