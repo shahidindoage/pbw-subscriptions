@@ -58,7 +58,10 @@
     .status-active { color: green; font-weight: bold; }
     .status-stopped { color: orange; font-weight: bold; }
     .status-cancelled { color: red; font-weight: bold; }
-
+.status-expired {
+  color: #d32f2f;
+  font-weight: 600;
+}
     .no-subscriptions {
       text-align: center;
       padding: 20px;
@@ -105,6 +108,23 @@
     font-weight: bold;
     color: #333;
   }
+  .order-btn {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1.5px solid #5e8046;
+  color: #5e8046;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  background: transparent;
+}
+
+.order-btn:hover {
+  background: #5e8046;
+  color: #fff;
+}
+
   </style>
 </head>
 <body>
@@ -140,20 +160,51 @@
         <tr>
           <td><%= sub.product %></td>
           <td><%= sub.frequency %> ( <%= sub.deliveryDays || "-" %> )</td>
-          <td class="status-<%= sub.status %>"><%= sub.status %></td>
-          <td>₹ <%= sub.totalAmount %></td>
-          <td><%= new Date(sub.createdAt).toDateString() %></td>
-           <td>
-    <%= sub.nextShippingDate
-      ? new Date(sub.nextShippingDate).toDateString()
-      : "-" %>
-  </td>
+          <td class="status-<%= sub.status === 'cancelled' ? 'expired' : sub.status %>">
+  <%= sub.status === 'cancelled' ? 'Expired' : sub.status %>
+</td>
 
-  <td>
-    <%= sub.subscriptionEndDate
-      ? new Date(sub.subscriptionEndDate).toDateString()
-      : "-" %>
-  </td>
+          <td>₹ <%= sub.totalAmount %></td>
+          <td>
+  <%= new Date(sub.createdAt).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+  }) %>
+</td>
+
+          <td>
+  <%= sub.nextShippingDate
+    ? new Date(sub.nextShippingDate).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      })
+    : "-" %>
+</td>
+
+<td>
+  <%= sub.subscriptionEndDate
+    ? new Date(sub.subscriptionEndDate).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      })
+    : "-" %>
+</td>
+
           
           <td>
   <button class="resume"
@@ -254,8 +305,20 @@ function openOrdersModal(subscriptionId) {
       data.orders.forEach(order => {
         tbody.innerHTML += `
           <tr>
+            <td>
+  ${
+    order.shopifyOrderId && order.order_number
+      ? `<a
+           href="https://pbwfoods.com/account/orders/${order.order_status_url}"
+           target="_blank"
+           class="order-btn"
+         >
+           PBW${order.order_number}
+         </a>`
+      : "-"
+  }
+</td>
             <td>${order.subscription?.product || "-"}</td>
-            <td>${order.shopifyOrderId || "-"}</td>
             <td>${new Date(order.shippingDate).toDateString()}</td>
             <td>${order.status}</td>
           </tr>
@@ -282,8 +345,8 @@ function closeOrdersModal() {
     <table style="margin-top:15px;">
       <thead>
         <tr>
+            <th>Order</th>
           <th>Product</th>
-          <th>Shopify Order ID</th>
           <th>Shipping Date</th>
           <th>Status</th>
        
