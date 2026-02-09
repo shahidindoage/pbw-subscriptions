@@ -11,7 +11,7 @@ import { createShopifyOrder } from "./utils/createShopifyOrder.js";
 // import "./cron/runCron.js"
 // import { addDays } from "date-fns";
 import cronRoutes from "./routes/cron.js";
-import { getOrderStatusEmail, sendWelcomeEmail } from "./utils/email.js";
+import { getOrderStatusEmail, sendSubscriptionCancelledEmail, sendSubscriptionResumedEmail, sendSubscriptionStoppedEmail, sendWelcomeEmail } from "./utils/email.js";
 import { sendEmail } from "./utils/email.js";
 import { addDays, nextDay, differenceInHours  } from "date-fns"; // npm i date-fns
 
@@ -178,6 +178,7 @@ app.get("/admin/subscription/:id/orders", isAdmin, async (req, res) => {
       status: o.status,
       createdAt: o.createdAt,
       product: o.subscription.product,
+      order_number: o.order_number
     }))
   );
 });
@@ -214,12 +215,14 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
   const { action } = req.body;
 
   let data = {};
+  let mailType = null;
 
   if (action === "stop") {
     data = {
       status: "stopped",
       pausedAt: new Date(),
     };
+    mailType = "stopped";
   }
 
   if (action === "resume") {
@@ -227,6 +230,7 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
       status: "active",
       pausedAt: null,
     };
+    mailType = "resumed";
   }
 
   if (action === "cancel") {
@@ -234,21 +238,44 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
       status: "cancelled",
       cancelledAt: new Date(),
       pausedAt: null,
-      nextShippingDate: null, // 🔥 THIS IS THE KEY FIX
+      nextShippingDate: null,
     };
+    mailType = "cancelled";
   }
 
   if (!Object.keys(data).length) {
     return res.redirect("/admin/subscriptions");
   }
 
-  await prisma.subscription.update({
+  // ✅ Update subscription
+  const subscription = await prisma.subscription.update({
     where: { id },
     data,
+    include: {
+      customer: true,
+    },
   });
+
+  // ✅ Send email (non-blocking)
+  try {
+    if (mailType === "stopped") {
+      await sendSubscriptionStoppedEmail(subscription.customer, subscription);
+    }
+
+    if (mailType === "resumed") {
+      await sendSubscriptionResumedEmail(subscription.customer, subscription);
+    }
+
+    if (mailType === "cancelled") {
+      await sendSubscriptionCancelledEmail(subscription.customer, subscription);
+    }
+  } catch (err) {
+    console.error("Admin subscription email failed:", err);
+  }
 
   res.redirect("/admin/subscriptions");
 });
+
 
 
 // Customer routes 

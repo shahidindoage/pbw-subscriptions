@@ -120,3 +120,41 @@ export function getOrderStatusEmail({ status, customerName, product, orderNumber
       return null; // no email for "created"
   }
 }
+
+
+export async function sendSubscriptionStoppedEmail(customer, sub) {
+  return sendEmail({
+    to: customer.email,
+    subject: "Your subscription has been paused",
+    html: `
+      <p>Hi ${customer.name},</p>
+      <p>Your subscription for <b>${sub.product}</b> has been paused.</p>
+      <p>You can resume it anytime.</p>
+    `,
+  });
+}
+
+
+export async function sendSubscriptionResumedEmail(customer, sub) {
+  return sendEmail({
+    to: customer.email,
+    subject: "Your subscription has been resumed",
+    html: `
+      <p>Hi ${customer.name},</p>
+      <p>Your subscription for <b>${sub.product}</b> is active again.</p>
+      <p>Next delivery: ${sub.nextShippingDate?.toDateString() || "-"}</p>
+    `,
+  });
+}
+
+export async function sendSubscriptionCancelledEmail(customer, sub) {
+  return sendEmail({
+    to: customer.email,
+    subject: "Your subscription has been expired",
+    html: `
+      <p>Hi ${customer.name},</p>
+      <p>Your subscription for <b>${sub.product}</b> has been expired.</p>
+      <p>No further deliveries will be made.</p>
+    `,
+  });
+}
