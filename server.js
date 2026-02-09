@@ -458,7 +458,7 @@ app.post("/customer/subscription/:id/resume", async (req, res) => {
 
     // ✅ Calculate paused days safely
     let pausedMs = now.getTime() - sub.pausedAt.getTime();
-    const pausedDays = Math.max(0, Math.ceil(pausedMs / (1000 * 60 * 60 * 24)));
+    const pausedDays = Math.max(0, Math.floor(pausedMs / (1000 * 60 * 60 * 24)));
 
     // ✅ Extend end date
     const newEndDate = addDays(sub.subscriptionEndDate, pausedDays);
