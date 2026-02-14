@@ -661,7 +661,18 @@ app.post("/create-subscription", async (req, res) => {
     });
     const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
     const currentIsHighValue = totalAmount > 5000;
-    if (!hasHighValueSub && !currentIsHighValue) finalDeliveryFee = 60 * period;
+    let frequencyCount = 1;
+
+if (frequency.toLowerCase().includes("twice")) {
+  frequencyCount = 2;
+} else if (frequency.toLowerCase().includes("thrice")) {
+  frequencyCount = 3;
+}
+
+   if (!hasHighValueSub && !currentIsHighValue) {
+  finalDeliveryFee = 60 * period * frequencyCount;
+}
+
 
     // ===============================
     // 2️⃣ Create Razorpay Order
