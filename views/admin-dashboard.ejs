@@ -224,7 +224,258 @@
   color: #ffffff;
 }
 .btn-secondary:hover { background: #d1d5db; }
+/* ===== Overlay ===== */
+#manualSubscriptionModal{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  backdrop-filter: blur(2px);
+  z-index:10000;
+}
 
+/* ===== Modal Box ===== */
+.manual-modal-box{
+  background:#fff;
+  max-width:820px;
+  margin:30px auto;
+  padding:20px 22px;
+  border-radius:10px;
+  box-shadow:0 15px 40px rgba(0,0,0,.12);
+  max-height:90vh;
+  overflow-y:auto;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+}
+
+/* ===== Header ===== */
+.manual-modal-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:15px;
+}
+
+.manual-modal-header h3{
+  font-size:16px;
+  font-weight:600;
+  margin:0;
+}
+
+.manual-close{
+  background:#f1f1f1;
+  border:none;
+  width:28px;
+  height:28px;
+  border-radius:6px;
+  cursor:pointer;
+  font-size:14px;
+}
+
+.manual-close:hover{
+  background:#e74c3c;
+  color:#fff;
+}
+
+/* ===== Compact Grid ===== */
+.manual-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+
+/* ===== Inputs ===== */
+.manual-grid input,
+.manual-grid select{
+  padding:7px 10px;
+  font-size:13px;
+  border-radius:6px;
+  border:1px solid #ddd;
+  transition:.2s;
+}
+
+.manual-grid input:focus,
+.manual-grid select:focus{
+  border-color:#2563eb;
+  outline:none;
+  box-shadow:0 0 0 2px rgba(37,99,235,.1);
+}
+
+/* ===== Section Title ===== */
+.section-title{
+  font-size:12px;
+  font-weight:600;
+  margin:12px 0 6px;
+  color:#555;
+}
+
+/* ===== Frequency Pills ===== */
+#frequencySelect{
+  background:#f8f9fb;
+}
+
+/* ===== Period Radios Compact ===== */
+.period-group{
+  display:flex;
+  gap:14px;
+  font-size:12px;
+}
+
+.period-group input{
+  accent-color:#2563eb;
+}
+
+/* ===== Delivery Compact Buttons ===== */
+#deliveryDaysWrapper {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+#deliveryDaysWrapper label{
+  padding:5px 12px;
+  border-radius:20px;
+  background:#f3f4f6;
+  font-size:12px;
+  cursor:pointer;
+  transition:all .2s ease;
+  display:flex;
+  align-items:center;
+}
+
+#deliveryDaysWrapper input{
+  display:none;
+}
+
+/* 🔥 When Checked */
+#deliveryDaysWrapper input:checked + span{
+  color:#fff;
+}
+
+#deliveryDaysWrapper input:checked + span::before{
+  content:"";
+}
+
+/* IMPORTANT: Change LABEL background */
+#deliveryDaysWrapper input:checked + span{
+  background:#2563eb;
+  padding:5px 12px;
+  border-radius:20px;
+}
+
+/* Hover */
+#deliveryDaysWrapper label:hover{
+  background:#e5e7eb;
+}
+
+/* ===== Total Highlight ===== */
+#calculatedTotal{
+  background:#f0f7ff;
+  border:1px solid #2563eb;
+  font-weight:600;
+  color:#2563eb;
+}
+
+/* ===== Submit Button ===== */
+.manual-submit{
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  padding:7px 16px;
+  font-size:13px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:.2s;
+}
+
+.manual-submit:hover{
+  background:#1e40af;
+}
+.invoice-actions-card {
+  
+ 
+  margin-bottom: 15px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+      justify-content: space-between;
+  align-items: center;
+}
+
+.range-group,
+.email-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.action-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+
+
+.primary {
+  background: #0d6efd;
+  color: white;
+}
+.primary:hover{
+   background: #2a73e0;
+  color: white;
+}
+.success {
+  background: #198754;
+  color: white;
+}
+.success:hover {
+  background: #228557;
+  color: white;
+}
+.danger {
+  background: #dc3545;
+  color: white;
+}
+.danger:hover {
+  background: #ce3e4d;
+  color: white;
+}
+.range-select,
+.email-input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  min-width: 180px;
+}
+
+.email-input {
+  min-width: 240px;
+}
+
+.spinner {
+  display: none;
+  font-size: 13px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.last-group {
+    display: flex;
+    gap: 20px;
+}
 </style>
 
 </head>
@@ -248,6 +499,12 @@
    class="<%= page === 'shopify-orders' ? 'active' : '' %>">
   Shopify Orders
 </a>
+
+<a href="/admin/dashboard?page=invoices"
+   class="<%= page === 'invoices' ? 'active' : '' %>">
+  Invoices
+</a>
+
 
     <br>
     <a href="/admin/logout">Logout</a>
@@ -313,7 +570,14 @@
 
 
   <% if (page === "subscriptions") { %>
-  <h2>Subscriptions</h2>
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>Subscriptions</h2>
+
+    <button class="btn btn-success"
+            onclick="openManualSubscriptionModal()">
+      + Manual Subscription
+    </button>
+  </div>
 
   <table id="adminTable">
     <tr>
@@ -398,6 +662,11 @@
 
         
      <td class="action-cell">
+        <button type="button"
+            class="btn btn-secondary"
+            onclick="openOrdersModal('<%= s.id %>')">
+      View Orders
+    </button>
   <% if (s.status === "active") { %>
 
     <form method="POST"
@@ -407,11 +676,7 @@
       <button type="submit" class="btn btn-warning">Stop</button>
     </form>
 
-    <button type="button"
-            class="btn btn-secondary"
-            onclick="openOrdersModal('<%= s.id %>')">
-      View Orders
-    </button>
+  
 
     <form method="POST"
           action="/admin/subscription/<%= s.id %>/action"
@@ -504,6 +769,8 @@
 
         <td><%= o.createdAt.toDateString() %></td>
 
+
+
         <td>
           <form method="POST" action="/admin/shopify-order/<%= o.id %>/status">
             <select name="status" onchange="this.form.submit()">
@@ -520,9 +787,350 @@
   </table>
 <% } %>
 
+<% if (page === "invoices") { %>
+  <h2>Invoices</h2>
+<div class="invoice-actions-card">
+
+  <div class="action-row">
+
+    <!-- Bulk Download -->
+    <button id="bulkDownloadBtn" class="action-btn danger">
+      <span id="btnText">Download Selected</span>
+      <span id="spinner" class="spinner">⏳</span>
+    </button>
+<div class="last-group">
+  <!-- Date Range -->
+    <div class="range-group">
+      <select id="exportRange" class="range-select">
+        <option value="7">Last 7 Days</option>
+        <option value="14">Last 14 Days</option>
+        <option value="1m">Last 1 Month</option>
+        <option value="6m">Last 6 Months</option>
+      </select>
+
+    <button id="exportByRangeBtn" class="action-btn primary">
+  <span id="rangeBtnText">Export Range</span>
+  <span id="rangeSpinner" class="spinner">⏳</span>
+</button>
+
+    </div>
+
+    <!-- Email Export -->
+    <div class="email-group">
+      <input type="email" id="exportEmail" 
+             placeholder="Filter by email (optional)" 
+             class="email-input"/>
+
+      <button id="emailExportBtn" class="action-btn success">
+        <span id="btnText2">Export</span>
+        <span id="spinner2" class="spinner">⏳</span>
+      </button>
+    </div>
+
+
+</div>
+  
+  </div>
+
+</div>
+
+
+  <table id="adminTable">
+    <tr>
+      <th>
+  <input type="checkbox" id="selectAll">
+</th>
+      <th>Shopify Order ID</th>
+      <th>Subscription ID</th>
+      <th>Customer</th>
+     <th>Shipping Date</th> 
+      <th>Status</th>
+      <th colspan="2" style="text-align: center;">Invoice Management</th>
+    </tr>
+
+    <% invoices.forEach(o => { %>
+      <tr>
+<td>
+  <input 
+    type="checkbox"
+    class="invoiceCheckbox"
+    value="<%= o.id %>"
+    <%= o.status === "created" ? "disabled" : "" %>
+  >
+</td>
+
+
+        <!-- Shopify Order -->
+        <td>
+          <% if (o.shopifyOrderId) { %>
+            PBW<%= o.order_number %>
+          <% } else { %>
+            -
+          <% } %>
+        </td>
+
+        <!-- Subscription -->
+        <td><%= o.subscription.id %></td>
+
+        <!-- Customer -->
+        <td><%= o.subscription.customer.email %></td>
+<td><strong><%= o.shippingDate.toDateString() %></strong></td>
+        <!-- Status -->
+        <td><strong><%= o.status %></strong></td>
+
+        <!-- Invoice Download -->
+  <td style="text-align: center;">
+  <% if (o.status === "created") { %>
+
+      <span style="color:orange; font-weight:500;text-align: center;">
+        Unfulfilled Order
+      </span>
+
+  <% } else if (o.invoiceUrl) { 
+       const viewUrl = o.invoiceUrl.replace("dl=0", "raw=1");
+       const downloadUrl = o.invoiceUrl.replace("dl=0", "dl=1");
+  %>
+
+    <div style="display:flex; gap:10px; align-items:center; justify-content:center;">
+
+      <!-- View Icon -->
+      <a href="<%= viewUrl %>" target="_blank" title="View Invoice">
+        <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25"
+             fill="#6c757d" viewBox="0 0 24 24"
+             style="cursor:pointer;">
+          <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 
+                   12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 
+                   0 6 3 3 0 0 0 0-6z"/>
+        </svg>
+      </a>
+
+      <!-- Download Icon -->
+      <a href="<%= downloadUrl %>" title="Download Invoice">
+        <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25"
+             fill="red" viewBox="0 0 24 24"
+             style="cursor:pointer;">
+          <path d="M12 16l4-5h-3V4h-2v7H8l4 
+                   5zm-7 2v2h14v-2H5z"/>
+        </svg>
+      </a>
+
+    </div>
+
+  <% } else { %>
+      <span class="text-muted">Not Generated</span>
+  <% } %>
+</td>
+
+
+
+
+
+
+      </tr>
+    <% }) %>
+
+  </table>
+<% } %>
 
   </div>
 </div>
+
+<script>
+document.getElementById("bulkDownloadBtn").addEventListener("click", async () => {
+
+  const selected = Array.from(document.querySelectorAll(".invoiceCheckbox:checked"))
+                        .map(cb => cb.value);
+
+  if (!selected.length) {
+    alert("Select at least one invoice");
+    return;
+  }
+
+  // Show loading
+  document.getElementById("spinner").style.display = "inline";
+  document.getElementById("btnText").innerText = "Preparing ZIP...";
+  document.getElementById("bulkDownloadBtn").disabled = true;
+
+  try {
+    const res = await fetch("/admin/export-invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selected })
+    });
+
+    const blob = await res.blob();
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+
+    // dynamic filename from response header
+    const disposition = res.headers.get("Content-Disposition");
+    const match = disposition && disposition.match(/filename="?(.+)"?/);
+    a.download = match ? match[1] : "invoices.zip";
+
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    alert("Download failed");
+  }
+
+  // Reset button
+  document.getElementById("spinner").style.display = "none";
+  document.getElementById("btnText").innerText = "Download Selected (ZIP)";
+  document.getElementById("bulkDownloadBtn").disabled = false;
+});
+</script>
+
+<script>
+const selectAll = document.getElementById("selectAll");
+
+selectAll.addEventListener("change", () => {
+  const checkboxes = document.querySelectorAll(".invoiceCheckbox:not(:disabled)");
+  checkboxes.forEach(cb => cb.checked = selectAll.checked);
+});
+
+// Handle individual checkbox change
+document.addEventListener("change", function(e) {
+  if (e.target.classList.contains("invoiceCheckbox")) {
+
+    const enabledCheckboxes = document.querySelectorAll(".invoiceCheckbox:not(:disabled)");
+    const checkedEnabled = document.querySelectorAll(".invoiceCheckbox:not(:disabled):checked");
+
+    selectAll.checked = enabledCheckboxes.length === checkedEnabled.length;
+  }
+});
+</script>
+
+
+<script>
+document.getElementById("exportByRangeBtn").addEventListener("click", async () => {
+
+  const btn = document.getElementById("exportByRangeBtn");
+  const spinner = document.getElementById("rangeSpinner");
+  const btnText = document.getElementById("rangeBtnText");
+  const range = document.getElementById("exportRange").value;
+
+  // 🔄 Show loading
+  spinner.style.display = "inline";
+  btnText.innerText = "Preparing ZIP...";
+  btn.disabled = true;
+
+  try {
+
+    const res = await fetch("/admin/export-invoices-by-range", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ range })
+    });
+
+    if (!res.ok) {
+      throw new Error("Export failed");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+
+    // Get filename from backend
+    const contentDisposition = res.headers.get("content-disposition");
+
+    let fileName = "Invoices.zip";
+
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match && match[1]) {
+        fileName = match[1];
+      }
+    }
+
+    a.download = fileName;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    alert("Export failed");
+  }
+
+  // 🔁 Reset
+  spinner.style.display = "none";
+  btnText.innerText = "Export Range";
+  btn.disabled = false;
+
+});
+</script>
+
+
+<script>
+document.getElementById("emailExportBtn").addEventListener("click", async () => {
+
+  const email = document.getElementById("exportEmail").value;
+
+  const btn = document.getElementById("emailExportBtn");
+  const spinner = document.getElementById("spinner2");
+  const btnText = document.getElementById("btnText2");
+
+  // 🔄 Show loading
+  spinner.style.display = "inline";
+  btnText.innerText = "Preparing ZIP...";
+  btn.disabled = true;
+
+  try {
+
+    const res = await fetch("/admin/export-invoices-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }) // no ids
+    });
+
+    if (!res.ok) {
+      throw new Error("Export failed");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+
+    // Get filename from backend
+    const disposition = res.headers.get("content-disposition");
+    let fileName = "Invoices.zip";
+
+    if (disposition) {
+      const match = disposition.match(/filename="?(.+?)"?$/);
+      if (match && match[1]) {
+        fileName = match[1];
+      }
+    }
+
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    alert("Download failed");
+  }
+
+  // 🔁 Reset
+  spinner.style.display = "none";
+  btnText.innerText = "Export All Valid Invoices";
+  btn.disabled = false;
+
+});
+</script>
+
+
 <script>
 function filterTable() {
   const input = document.getElementById("adminSearch");
@@ -672,6 +1280,241 @@ function closeAddress() {
   document.getElementById("addressModal").style.display = "none";
 }
 </script>
+<!-- Manual Subscription Modal -->
+<div id="manualSubscriptionModal">
+  <div class="manual-modal-box">
 
+    <div class="manual-modal-header">
+      <h3>Create Manual Subscription</h3>
+      <button onclick="closeManualSubscriptionModal()" class="manual-close">✕</button>
+    </div>
+
+    <form method="POST" action="/admin/manual-subscription">
+
+      <div class="manual-grid">
+
+        <input id="customerName" name="name" placeholder="Customer Name" required />
+        <input id="customerEmail" name="email" type="email" placeholder="Email" required />
+        <input id="customerContact" name="contact" placeholder="Contact" />
+
+        <input name="product" id="productInput" placeholder="Product" required />
+        <select name="frequency" id="frequencySelect" required>
+          <option value="">Frequency</option>
+          <option value="Once a week" data-multiplier="1" data-days="1">Once / Week</option>
+          <option value="Twice a week" data-multiplier="2" data-days="2">Twice / Week</option>
+          <option value="Thrice a week" data-multiplier="3" data-days="3">Thrice / Week</option>
+        </select>
+        <input name="quantity" id="quantityInput" type="number" placeholder="Qty" min="1" required />
+
+        <!-- Period -->
+        <div style="grid-column:1/-1">
+          <div class="section-title">Subscription Period</div>
+          <div class="period-group">
+            <label><input type="radio" name="period" value="4" required> 4W</label>
+            <label><input type="radio" name="period" value="8"> 8W</label>
+            <label><input type="radio" name="period" value="12"> 12W</label>
+          </div>
+        </div>
+
+        <!-- Total -->
+        <input id="calculatedTotal" type="text" readonly placeholder="Total Amount" />
+
+        <input name="subscriptionStartDate" type="datetime-local" required />
+
+      </div>
+
+      <div class="section-title">Delivery Days</div>
+      <div id="deliveryDaysWrapper">
+        <label><input type="checkbox" name="deliveryDays" value="Mon"><span>Mon</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Tue"><span>Tue</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Wed"><span>Wed</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Thu"><span>Thu</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Fri"><span>Fri</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Sat"><span>Sat</span></label>
+        <label><input type="checkbox" name="deliveryDays" value="Sun"><span>Sun</span></label>
+      </div>
+
+      <div class="section-title">Address</div>
+      <div class="manual-grid">
+        <input id="addressLine1" name="address[line1]" placeholder="Line 1" />
+        <input id="addressLine2" name="address[line2]" placeholder="Line 2" />
+        <input id="addressCity" name="address[city]" placeholder="City" />
+        <input id="addressState" name="address[state]" placeholder="State" />
+        <input id="addressPincode" name="address[pincode]" placeholder="Pincode" />
+        <input id="addressCountry" name="address[country]" placeholder="Country" />
+      </div>
+
+      <div style="text-align:right; margin-top:15px;">
+        <button type="submit" class="manual-submit">Create</button>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+  const emailInput = document.getElementById("customerEmail");
+  const productInput = document.getElementById("productInput");
+  const frequencySelect = document.getElementById("frequencySelect");
+  const quantityInput = document.getElementById("quantityInput");
+  const totalField = document.getElementById("calculatedTotal");
+  const deliveryCheckboxes = document.querySelectorAll('input[name="deliveryDays"]');
+  const periodRadios = document.querySelectorAll('input[name="period"]');
+
+  let basePrice = 0;
+  let allowedDays = 0;
+
+  /* ===============================
+     EMAIL AUTOFILL
+  =============================== */
+  emailInput.addEventListener("change", async function () {
+
+    const email = this.value.trim();
+    if (!email) return;
+
+    try {
+      const res = await fetch(`/admin/get-customer-by-email?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+
+      if (!data || !data.exists || !data.customer) return;
+
+      const c = data.customer;
+
+      document.getElementById("customerName").value = c.name || "";
+      document.getElementById("customerContact").value = c.contact || "";
+
+      if (c.address) {
+        document.getElementById("addressLine1").value = c.address.line1 || "";
+        document.getElementById("addressLine2").value = c.address.line2 || "";
+        document.getElementById("addressCity").value = c.address.city || "";
+        document.getElementById("addressState").value = c.address.state || "";
+        document.getElementById("addressPincode").value = c.address.pincode || "";
+        document.getElementById("addressCountry").value = c.address.country || "";
+      }
+
+    } catch (err) {
+      console.error("Autofill error:", err);
+    }
+
+  });
+
+  /* ===============================
+     DELIVERY DAY LIMIT
+  =============================== */
+  frequencySelect.addEventListener("change", function () {
+
+    const selected = frequencySelect.options[frequencySelect.selectedIndex];
+
+    allowedDays = Number(selected?.dataset.days || 0);
+
+    // reset all
+    deliveryCheckboxes.forEach(cb => cb.checked = false);
+
+    fetchVariantPrice();
+    calculateTotal();
+  });
+
+  // Only ONE listener for delivery days
+  deliveryCheckboxes.forEach(cb => {
+    cb.addEventListener("change", function () {
+
+      const checkedCount = [...deliveryCheckboxes].filter(c => c.checked).length;
+
+      if (checkedCount > allowedDays) {
+        this.checked = false;
+        alert(`You can select only ${allowedDays} delivery day(s)`);
+      }
+    });
+  });
+
+  /* ===============================
+     FETCH PRICE
+  =============================== */
+  async function fetchVariantPrice() {
+
+    const product = productInput.value.trim();
+    const frequency = frequencySelect.value;
+
+    if (!product || !frequency) {
+      basePrice = 0;
+      totalField.value = "";
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/get-variant-price?product=${encodeURIComponent(product)}&frequency=${encodeURIComponent(frequency)}`
+      );
+
+      const data = await res.json();
+
+      console.log("Price API response:", data);
+
+      if (data && data.price !== undefined) {
+        basePrice = Number(data.price);
+      } else {
+        basePrice = 0;
+      }
+
+      calculateTotal();
+
+    } catch (err) {
+      console.error("Price fetch error:", err);
+      basePrice = 0;
+      totalField.value = "";
+    }
+  }
+
+  /* ===============================
+     TOTAL CALCULATION
+     Total = basePrice × quantity × period × frequencyMultiplier
+  =============================== */
+  function calculateTotal() {
+
+    const quantity = Number(quantityInput.value) || 0;
+
+    const selectedOption = frequencySelect.options[frequencySelect.selectedIndex];
+    const multiplier = Number(selectedOption?.dataset.multiplier || 0);
+
+    const selectedPeriod = document.querySelector('input[name="period"]:checked');
+    const period = Number(selectedPeriod?.value || 0);
+
+    console.log("Base:", basePrice);
+    console.log("Qty:", quantity);
+    console.log("Period:", period);
+    console.log("Multiplier:", multiplier);
+
+    if (!basePrice || !quantity || !period || !multiplier) {
+      totalField.value = "";
+      return;
+    }
+
+    const total = basePrice * quantity * period * multiplier;
+
+    totalField.value = "₹ " + total.toFixed(2);
+  }
+
+  /* ===============================
+     EVENT BINDINGS
+  =============================== */
+  productInput.addEventListener("blur", fetchVariantPrice);
+  quantityInput.addEventListener("input", calculateTotal);
+  periodRadios.forEach(r => r.addEventListener("change", calculateTotal));
+
+});
+
+
+/* MODAL FUNCTIONS */
+function openManualSubscriptionModal() {
+  document.getElementById("manualSubscriptionModal").style.display = "block";
+}
+
+function closeManualSubscriptionModal() {
+  document.getElementById("manualSubscriptionModal").style.display = "none";
+}
+</script>
 </body>
 </html>

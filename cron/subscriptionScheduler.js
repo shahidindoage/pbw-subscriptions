@@ -2,6 +2,10 @@ import prisma from "../utils/prisma.js";
 import { createShopifyOrder } from "../utils/createShopifyOrder.js";
 import { addDays, subHours, differenceInSeconds } from "date-fns";
 import { sendEmail } from "../utils/email.js";
+import { generateInvoiceBuffer } from "../utils/generateInvoice.js";
+import { uploadInvoice } from "../utils/uploadInvoice.js";
+import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
+// import { uploadInvoiceToShopify } from "../utils/shopifyUploadInvoice.js";
 
 /**
  * Scheduler:
@@ -88,13 +92,25 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
       // 🛒 CREATE SHOPIFY ORDER
       // ===============================
       const addr = sub.address || {};
-      const fullName = addr.name || "Customer";
-      const [firstName, ...rest] = fullName.split(" ");
-      const lastName = rest.join(" ") || " ";
+      const fullName = addr.name || sub.customer.name || "Customer";
+      const nameParts = (fullName || "Customer User").trim().split(/\s+/);
 
+      const firstName = nameParts[0] || "Customer";
+       const lastName =
+        nameParts.length > 1
+    ? nameParts.slice(1).join(" ")
+    : "User"; // fallback if no last name
+const numericVariantId = sub.variantId?.toString().includes("gid://")
+  ? sub.variantId.split("/").pop()
+  : sub.variantId;
       const shopifyOrderData = {
         order: {
-          line_items: [{ variant_id: sub.variantId || 0, quantity: sub.quantity }],
+        line_items: [
+  {
+    variant_id: Number(numericVariantId),
+    quantity: sub.quantity,
+  },
+],
           customer: { first_name: firstName, last_name: lastName, email: sub.customer.email },
           financial_status: "paid",
           fulfillment_status: "unfulfilled",
@@ -134,7 +150,8 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
           send_fulfillment_receipt: false,
         },
       };
-
+console.log("Variant ID from DB:", sub.variantId);
+console.log("Converted Variant ID:", numericVariantId);
       // console.log("📦 Shopify Order Payload:", JSON.stringify(shopifyOrderData, null, 2));
 
       const shopifyRes = await createShopifyOrder(shopifyOrderData);
@@ -145,74 +162,105 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
 //   JSON.stringify(shopifyRes, null, 2)
 // );
       const shopifyOrderId = shopifyRes?.order?.id?.toString() || null;
-const shopifyOrder = shopifyRes.order;
+       const shopifyOrder = shopifyRes.order;
       console.log(`✅ Shopify order ${shopifyOrderId} created for subscription ${sub.id}`);
 
-      // 🧾 SAVE ORDER RECORD
-      await prisma.shopifyOrder.create({
-        data: {
-          subscriptionId: sub.id,
-          shopifyOrderId,
-           order_number: shopifyOrder.order_number.toString(),                 // PBW6481
-    order_status_url: shopifyOrder.token.toString(), // ✅ correct link
-          shippingDate,
-          status: "created",
-          shippingAddress: addr,
-          billingAddress: addr,
-        },
-      });
+      // ===============================
+// 🧾 GENERATE INVOICE
+// ===============================
+
+// 1️⃣ Invoice Number
+const invoiceNumber = `INV-${shopifyOrder.order_number}`;
+
+// 2️⃣ Generate PDF Buffer
+const invoiceBuffer = await generateInvoiceBuffer(
+  shopifyOrder,
+  sub,
+  sub.customer,
+  invoiceNumber,
+  shippingDate
+);
+
+const invoiceUrl = await uploadInvoiceToDropbox(
+  invoiceBuffer,
+  `${invoiceNumber}.pdf`
+);
+
+console.log("✅ Invoice URL:", invoiceUrl);
+
+
+// ===============================
+// 💾 SAVE SHOPIFY ORDER WITH INVOICE
+// ===============================
+
+await prisma.shopifyOrder.create({
+  data: {
+    subscriptionId: sub.id,
+    shopifyOrderId,
+    order_number: shopifyOrder.order_number.toString(),
+    order_status_url: shopifyOrder.token.toString(),
+    shippingDate,
+    status: "created",
+    shippingAddress: addr,
+    billingAddress: addr,
+    invoiceUrl,      // ✅ saved
+    invoiceNumber,   // ✅ saved
+  },
+});
+
+
 
 
       // 📧 SEND ORDER CREATED EMAIL
-try {
-  const orderLink = `https://pbwfoods.com/account/orders/${shopifyOrder.token.toString()}`;
+// try {
+//   const orderLink = `https://pbwfoods.com/account/orders/${shopifyOrder.token.toString()}`;
 
-  await sendEmail({
-    to: sub.customer.email,
-    subject: `Order Confirmed: PBW${shopifyOrder.order_number.toString()}`,
-    html: `
-      <h2>Order Confirmed 🎉</h2>
+//   await sendEmail({
+//     to: sub.customer.email,
+//     subject: `Order Confirmed: PBW${shopifyOrder.order_number.toString()}`,
+//     html: `
+//       <h2>Order Confirmed 🎉</h2>
 
-      <p>Hi ${sub.customer.name || "there"},</p>
+//       <p>Hi ${sub.customer.name || "there"},</p>
 
-      <p>Your order for <strong>${sub.product}</strong> has been successfully created.</p>
+//       <p>Your order for <strong>${sub.product}</strong> has been successfully created.</p>
 
-      <p>
-        <strong>Order Number:</strong> PBW${shopifyOrder.order_number.toString()}<br/>
-        <strong>Delivery Date:</strong>
-        ${shippingDate.toLocaleDateString("en-IN", {
-          weekday: "short",
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })}
-      </p>
+//       <p>
+//         <strong>Order Number:</strong> PBW${shopifyOrder.order_number.toString()}<br/>
+//         <strong>Delivery Date:</strong>
+//         ${shippingDate.toLocaleDateString("en-IN", {
+//           weekday: "short",
+//           day: "2-digit",
+//           month: "short",
+//           year: "numeric",
+//         })}
+//       </p>
 
-      <p>
-        <a href="${orderLink}"
-           style="
-             display:inline-block;
-             padding:10px 18px;
-             background:#5e8046;
-             color:#ffffff;
-             text-decoration:none;
-             border-radius:6px;
-             font-weight:600;
-           ">
-          View Order
-        </a>
-      </p>
+//       <p>
+//         <a href="${orderLink}"
+//            style="
+//              display:inline-block;
+//              padding:10px 18px;
+//              background:#5e8046;
+//              color:#ffffff;
+//              text-decoration:none;
+//              border-radius:6px;
+//              font-weight:600;
+//            ">
+//           View Order
+//         </a>
+//       </p>
 
-      <p>If you need help, just reply to this email.</p>
+//       <p>If you need help, just reply to this email.</p>
 
-      <p>— PBW Foods 💚</p>
-    `,
-  });
+//       <p>— PBW Foods 💚</p>
+//     `,
+//   });
 
-  console.log("📧 Order confirmation email sent");
-} catch (err) {
-  console.error("❌ Failed to send order email:", err);
-}
+//   console.log("📧 Order confirmation email sent");
+// } catch (err) {
+//   console.error("❌ Failed to send order email:", err);
+// }
 
       // 🛑 LAST ORDER? → CANCEL IMMEDIATELY
       // if (sub.subscriptionEndDate && shippingDate >= sub.subscriptionEndDate) {
@@ -270,3 +318,4 @@ if (createdOrdersCount >= totalAllowedOrders) {
 
   console.log("🕒 Scheduler run completed");
 }
+

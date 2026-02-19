@@ -77,6 +77,9 @@ model ShopifyOrder {
 
   status         String
 
+  invoiceUrl    String?
+invoiceNumber String?
+
   shippingAddress Json?
   billingAddress  Json?
   note            String?

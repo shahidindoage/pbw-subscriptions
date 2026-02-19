@@ -7,23 +7,77 @@ import prisma from "./utils/prisma.js"; // Prisma client
 import session from "express-session";
 import crypto from "crypto";
 import axios from "axios";
-import { createShopifyOrder } from "./utils/createShopifyOrder.js";
-// import "./cron/runCron.js"
+import {fulfillShopifyOrder  } from "./utils/shopifyFulfillmentManager.js";
+// import "./cron/shopifyOrderScheduler.js";
+// import "./cron/runCron.js"  
 // import { addDays } from "date-fns";
+import archiver from "archiver";
 import cronRoutes from "./routes/cron.js";
 import { getOrderStatusEmail, sendSubscriptionCancelledEmail, sendSubscriptionResumedEmail, sendSubscriptionStoppedEmail, sendWelcomeEmail } from "./utils/email.js";
 import { sendEmail } from "./utils/email.js";
 import { addDays, nextDay, differenceInHours  } from "date-fns"; // npm i date-fns
+import cloudinary from "./utils/cloudinary.js";
+import { getVariantByProductAndFrequency } from "./utils/getVariantByProductAndFrequency.js";
+import shopifyCronRoute from "./routes/shopifyCronRoute.js";
 
 dotenv.config();
 
 const app = express();
+
+
+
+// app.get("/dropbox/auth", (req, res) => {
+//   const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&token_access_type=offline&redirect_uri=${REDIRECT_URI}`;
+
+//   res.redirect(authUrl);
+// });
+
+
+// app.get("/dropbox/callback", async (req, res) => {
+//   const code = req.query.code;
+
+//   if (!code) {
+//     return res.send("No authorization code received");
+//   }
+
+//   try {
+//     const response = await axios.post(
+//       "https://api.dropboxapi.com/oauth2/token",
+//       new URLSearchParams({
+//         code: code,
+//         grant_type: "authorization_code",
+//         client_id: CLIENT_ID,
+//         client_secret: CLIENT_SECRET,
+//         redirect_uri: REDIRECT_URI,
+//       }),
+//       {
+//         headers: {
+//           "Content-Type": "application/x-www-form-urlencoded",
+//         },
+//       }
+//     );
+
+//     console.log("TOKENS:", response.data);
+
+//     res.json({
+//       message: "Success",
+//       refresh_token: response.data.refresh_token,
+//       access_token: response.data.access_token,
+//     });
+
+//   } catch (error) {
+//     console.error(error.response?.data || error.message);
+//     res.status(500).send("Token exchange failed");
+//   }
+// });
+
 
 app.set("view engine", "ejs");
 app.set("views", "./views");
 
 // ===== Middleware =====
 app.use(cors());
+app.use(express.static("public"));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -35,6 +89,7 @@ app.use(
   })
 );
 app.use("/cron", cronRoutes);
+app.use("/api/cron", shopifyCronRoute);
 // ===== Razorpay Client =====
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
@@ -95,12 +150,29 @@ app.get("/admin/dashboard", isAdmin, async (req, res) => {
     },
     orderBy: { createdAt: "desc" },
   });
+    // ✅ Only orders that have invoice
+  const invoices = await prisma.shopifyOrder.findMany({
+    where: {
+      invoiceUrl: {
+        not: null,
+      },
+    },
+    include: {
+      subscription: {
+        include: {
+          customer: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
   res.render("admin-dashboard", {
     page: req.query.page || "customers",
     customers,
     subscriptions,
     shopifyOrders,
+    invoices, // ✅ pass invoices
   });
 });
 app.post("/admin/shopify-order/:id/status", isAdmin, async (req, res) => {
@@ -127,6 +199,17 @@ app.post("/admin/shopify-order/:id/status", isAdmin, async (req, res) => {
   if (order.status === status) {
     return  res.redirect("/admin/dashboard?page=shopify-orders");
   }
+
+  // 🔥 If created → processing → fulfill Shopify
+if (order.shopifyOrderId && order.status === "created" && status === "processing")
+{
+  try {
+    await fulfillShopifyOrder(order.shopifyOrderId);
+  } catch (err) {
+    console.error("Shopify fulfillment error:", err);
+  }
+}
+
 
   // 2️⃣ Update status
   await prisma.shopifyOrder.update({
@@ -274,6 +357,261 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
   }
 
   res.redirect("/admin/subscriptions");
+});
+app.get("/invoice/download/:id", async (req, res) => {
+  try {
+    const order = await prisma.shopifyOrder.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!order?.invoiceUrl) {
+      return res.status(404).send("Invoice not found");
+    }
+
+    // Extract public_id correctly
+    // Remove everything before "/invoices/"
+    const urlParts = order.invoiceUrl.split("/invoices/");
+    if (!urlParts[1]) throw new Error("Invalid invoice URL");
+
+    const publicId = `invoices/${urlParts[1].replace(".pdf", "")}`;
+
+    // Generate signed download URL
+    const signedUrl = cloudinary.utils.private_download_url(
+      publicId,
+      "pdf",
+      {
+        resource_type: "raw",
+        attachment: true,
+      }
+    );
+
+    // Redirect to Cloudinary signed URL
+    return res.redirect(signedUrl);
+
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).send("Download failed");
+  }
+});
+
+app.post("/admin/export-invoices", async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    const invoices = await prisma.shopifyOrder.findMany({
+      where: {
+        id: { in: ids },
+        invoiceUrl: { not: null },
+      },
+    });
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+
+    const zipName = `Invoices-${year}-${month}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${zipName}`
+    );
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.pipe(res);
+
+    for (const invoice of invoices) {
+      const response = await axios.get(
+        invoice.invoiceUrl.replace("dl=0", "raw=1"),
+        { responseType: "arraybuffer" }
+      );
+
+      archive.append(response.data, {
+        name: `${invoice.invoiceNumber}.pdf`,
+      });
+    }
+
+    await archive.finalize();
+
+  } catch (err) {
+    console.error("Bulk export failed:", err);
+    res.status(500).json({ error: "Bulk export failed" });
+  }
+});
+app.post("/admin/export-invoices-by-range", async (req, res) => {
+  try {
+    const { range } = req.body;
+
+    if (!range) {
+      return res.status(400).json({ error: "Range is required" });
+    }
+
+    const now = new Date();
+    let startDate = new Date(now); // ✅ important: clone now
+
+    // 🎯 Calculate date range safely
+    if (range === "7") {
+      startDate.setDate(now.getDate() - 7);
+    } 
+    else if (range === "14") {
+      startDate.setDate(now.getDate() - 14);
+    } 
+    else if (range === "1m") {
+      startDate.setMonth(now.getMonth() - 1);
+    } 
+    else if (range === "6m") {
+      startDate.setMonth(now.getMonth() - 6);
+    } 
+    else {
+      return res.status(400).json({ error: "Invalid range value" });
+    }
+
+    // 📦 Fetch invoices
+    const invoices = await prisma.shopifyOrder.findMany({
+  where: {
+    invoiceUrl: { not: null },
+    status: {
+      not: "created",   // ✅ Exclude created
+    },
+    shippingDate: {
+      gte: startDate,
+      lte: now,
+    },
+  },
+});
+
+
+    if (!invoices.length) {
+      return res.status(404).json({ error: "No invoices found" });
+    }
+
+    // 📅 Format date helper
+    const formatDate = (date) =>
+      date.toISOString().split("T")[0];
+
+    let rangeLabel = "";
+
+    if (range === "7") rangeLabel = "Last-7-Days";
+    else if (range === "14") rangeLabel = "Last-14-Days";
+    else if (range === "1m") rangeLabel = "Last-1-Month";
+    else if (range === "6m") rangeLabel = "Last-6-Months";
+
+    const zipName = `Invoices-${rangeLabel}-${formatDate(now)}.zip`;
+
+    // 📨 Set headers
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${zipName}"`
+    );
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    archive.on("error", (err) => {
+      console.error("Archive error:", err);
+      res.status(500).end();
+    });
+
+    archive.pipe(res);
+
+    // 📂 Add invoices to ZIP
+    for (const invoice of invoices) {
+      try {
+        const fileUrl = invoice.invoiceUrl.replace("dl=0", "raw=1");
+
+        const response = await axios.get(fileUrl, {
+          responseType: "arraybuffer",
+        });
+
+        archive.append(response.data, {
+          name: `${invoice.invoiceNumber}.pdf`,
+        });
+
+      } catch (err) {
+        console.error("Failed invoice:", invoice.id);
+      }
+    }
+
+    await archive.finalize();
+
+  } catch (err) {
+    console.error("Export by range failed:", err);
+    res.status(500).json({ error: "Export failed" });
+  }
+});
+app.post("/admin/export-invoices-email", async (req, res) => {
+  try {
+    const {  email } = req.body;
+
+   
+
+    // ✅ Fetch invoices (exclude created)
+    const invoices = await prisma.shopifyOrder.findMany({
+  where: {
+    invoiceUrl: { not: null },
+    status: { not: "created" }, // exclude created
+
+    subscription: {
+      customer: {
+        email: {
+          equals: email,
+          mode: "insensitive", // case-insensitive match
+        },
+      },
+    },
+  },
+});
+
+    if (!invoices.length) {
+      return res.status(404).json({ error: "No valid invoices found" });
+    }
+
+    const now = new Date();
+    const zipName = `Invoices-${now.toISOString().split("T")[0]}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${zipName}"`
+    );
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    archive.on("error", (err) => {
+      console.error("Archive error:", err);
+      res.status(500).end();
+    });
+
+    archive.pipe(res);
+
+    for (const invoice of invoices) {
+      try {
+        const fileUrl = invoice.invoiceUrl.replace("dl=0", "raw=1");
+
+        const response = await axios.get(fileUrl, {
+          responseType: "arraybuffer",
+        });
+
+        archive.append(response.data, {
+          name: `${invoice.invoiceNumber}.pdf`,
+        });
+
+      } catch (err) {
+        console.error("Failed invoice:", invoice.id);
+      }
+    }
+
+    await archive.finalize();
+
+    // Optional: log email for tracking
+    if (email) {
+      console.log(`Invoices exported by: ${email}`);
+    }
+
+  } catch (err) {
+    console.error("Export failed:", err);
+    res.status(500).json({ error: "Export failed" });
+  }
 });
 
 
@@ -661,7 +999,20 @@ app.post("/create-subscription", async (req, res) => {
     });
     const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
     const currentIsHighValue = totalAmount > 5000;
-    if (!hasHighValueSub && !currentIsHighValue) finalDeliveryFee = 60 * period;
+
+    // Convert frequency string to number
+let frequencyCount = 1;
+
+if (frequency.toLowerCase().includes("twice")) {
+  frequencyCount = 2;
+} else if (frequency.toLowerCase().includes("thrice")) {
+  frequencyCount = 3;
+}
+
+   if (!hasHighValueSub && !currentIsHighValue) {
+  finalDeliveryFee = 60 * period * frequencyCount;
+}
+
 
     // ===============================
     // 2️⃣ Create Razorpay Order
@@ -864,9 +1215,302 @@ if (!nextShippingDate) {
   }
 });
 
+app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      contact,
+      product,
+      frequency,
+      quantity,
+      period,
+      deliveryDays,
+      address,
+      subscriptionStartDate
+    } = req.body;
 
+    // ===============================
+    // 1️⃣ Basic Validation
+    // ===============================
 
+    if (!name || !email || !product || !frequency || !quantity || !period) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
+    if (!subscriptionStartDate) {
+      return res.status(400).json({ error: "Subscription start date required" });
+    }
+
+    const startDate = new Date(subscriptionStartDate);
+    if (isNaN(startDate.getTime())) {
+      return res.status(400).json({ error: "Invalid start date" });
+    }
+
+    if (startDate < new Date()) {
+      return res.status(400).json({ error: "Start date cannot be in the past" });
+    }
+
+    // Normalize deliveryDays (can be string if only one selected)
+    let normalizedDeliveryDays = [];
+
+    if (Array.isArray(deliveryDays)) {
+      normalizedDeliveryDays = deliveryDays;
+    } else if (typeof deliveryDays === "string") {
+      normalizedDeliveryDays = [deliveryDays];
+    }
+
+    if (!normalizedDeliveryDays.length) {
+      return res.status(400).json({ error: "At least one delivery day required" });
+    }
+
+    const parsedQuantity = Number(quantity);
+    const parsedPeriod = Number(period);
+
+    if (
+      isNaN(parsedQuantity) ||
+      isNaN(parsedPeriod) ||
+      parsedQuantity <= 0 ||
+      parsedPeriod <= 0
+    ) {
+      return res.status(400).json({ error: "Invalid quantity or period" });
+    }
+
+    // ===============================
+    // 2️⃣ Frequency Multiplier
+    // ===============================
+
+    let frequencyMultiplier = 1;
+
+    if (frequency === "Once a week" || frequency === "Once / Week") frequencyMultiplier = 1;
+    else if (frequency === "Twice a week" || frequency === "Twice / Week") frequencyMultiplier = 2;
+    else if (frequency === "Thrice a week" || frequency === "Thrice / Week") frequencyMultiplier = 3;
+    else {
+      return res.status(400).json({ error: "Invalid frequency selected" });
+    }
+
+    const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+
+    // ===============================
+    // 3️⃣ Get or Create Customer
+    // ===============================
+
+    let dbCustomer = await prisma.customer.findUnique({
+      where: { email }
+    });
+
+    if (!dbCustomer) {
+      const randomPassword = crypto.randomBytes(4).toString("hex");
+
+      dbCustomer = await prisma.customer.create({
+        data: {
+          name,
+          email,
+          contact: contact || null,
+          password: randomPassword, // ⚠️ hash in production
+          address: address || null,
+        },
+      });
+    } else {
+      dbCustomer = await prisma.customer.update({
+        where: { email },
+        data: {
+          name,
+          contact: contact || null,
+          address: address || dbCustomer.address,
+        },
+      });
+    }
+
+    // ===============================
+    // 4️⃣ Fetch Variant From Shopify
+    // ===============================
+
+    const variant = await getVariantByProductAndFrequency(product, frequency);
+
+    if (!variant) {
+      return res.status(400).json({ error: "Variant not found in Shopify" });
+    }
+
+    const variantId = variant.id.toString();
+    const variantPrice = Number(variant.price);
+
+    if (isNaN(variantPrice) || variantPrice <= 0) {
+      return res.status(400).json({ error: "Invalid variant price" });
+    }
+
+    // ✅ FINAL SECURE TOTAL CALCULATION
+    const parsedTotalAmount =
+      variantPrice *
+      parsedQuantity *
+      parsedPeriod *
+      frequencyMultiplier;
+
+    // ===============================
+    // 5️⃣ Delivery Fee Logic
+    // ===============================
+
+    let finalDeliveryFee = 0;
+
+    const previousSubs = await prisma.subscription.findMany({
+      where: {
+        customerId: dbCustomer.id,
+        status: { in: ["active", "stopped"] },
+      },
+      select: { totalAmount: true },
+    });
+
+    const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
+    const currentIsHighValue = parsedTotalAmount > 5000;
+
+    if (!hasHighValueSub && !currentIsHighValue) {
+      finalDeliveryFee = 60 * parsedPeriod * frequencyMultiplier;
+    }
+
+    // ===============================
+    // 6️⃣ Shipping Date Calculation
+    // ===============================
+
+    const startDay = startDate.getDay();
+
+    const cutoff = new Date(startDate);
+    cutoff.setHours(11, 0, 0, 0);
+
+    const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+
+    let nextShippingDate = null;
+
+    for (let i = 0; i <= 14; i++) {
+      const candidate = addDays(startDate, i);
+      const candidateDay = candidate.getDay();
+
+      if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) continue;
+
+      const shippingUTC = ist11AMToUTC(candidate);
+
+      if (shippingUTC < minShippingTime) continue;
+
+      if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
+        continue;
+      }
+
+      if (candidateDay === startDay && startDate >= cutoff) {
+        continue;
+      }
+
+      nextShippingDate = shippingUTC;
+      break;
+    }
+
+    if (!nextShippingDate) {
+      return res.status(400).json({ error: "No valid next shipping date found" });
+    }
+
+    // ===============================
+    // 7️⃣ Subscription End Date
+    // ===============================
+
+    const subscriptionEndDate = addDays(
+      nextShippingDate,
+      parsedPeriod * 7
+    );
+
+    // ===============================
+    // 8️⃣ Create Subscription
+    // ===============================
+
+    const sub = await prisma.subscription.create({
+      data: {
+        razorpayOrderId: null,
+        product,
+        variantId,
+        frequency,
+        quantity: parsedQuantity,
+        period: parsedPeriod,
+        deliveryDays: normalizedDeliveryDays.join(","),
+        totalAmount: parsedTotalAmount,
+        deliveryFee: finalDeliveryFee,
+        status: "active",
+        customerId: dbCustomer.id,
+        isOneTimePurchase: false,
+        subscriptionEndDate,
+        createdAt: startDate,
+        nextShippingDate,
+        address: address || null,
+      },
+    });
+
+    // ===============================
+    // 9️⃣ Success Response
+    // ===============================
+
+    return res.redirect("/admin/subscriptions");
+
+  } catch (err) {
+    console.error("Manual subscription creation failed:", err);
+    res.status(500).json({
+      error: "Manual subscription creation failed",
+      details: err.message
+    });
+  }
+});
+
+app.get("/api/get-variant-price", async (req, res) => {
+  try {
+    const { product, frequency } = req.query;
+
+    if (!product || !frequency) {
+      return res.status(400).json({ error: "Missing params" });
+    }
+
+    const variant = await getVariantByProductAndFrequency(product, frequency);
+
+    if (!variant) {
+      return res.status(404).json({ error: "Variant not found" });
+    }
+
+    // Works for Shopify REST or GraphQL
+    const rawPrice = variant.price?.amount || variant.price;
+    const numericPrice = Number(rawPrice);
+
+    res.json({ price: numericPrice });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+app.get("/admin/get-customer-by-email", isAdmin, async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { email }
+    });
+
+    if (!customer) {
+      return res.json({ exists: false });
+    }
+
+    return res.json({
+      exists: true,
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        contact: customer.contact,
+        address: customer.address
+      }
+    });
+
+  } catch (err) {
+    console.error("Fetch customer error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 app.post("/verify-payment", async (req, res) => {
   try {
