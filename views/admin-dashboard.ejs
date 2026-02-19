@@ -1297,7 +1297,16 @@ function closeAddress() {
         <input id="customerEmail" name="email" type="email" placeholder="Email" required />
         <input id="customerContact" name="contact" placeholder="Contact" />
 
-        <input name="product" id="productInput" placeholder="Product" required />
+        <select id="productSelect" name="productName">
+  <option value="">Select Product</option>
+  <option value="100% Whole Wheat Bread  | 250 g">
+    100% Whole Wheat Bread  | 250 g
+  </option>
+  <option value="Beverages Combo">
+    Beverages Combo
+  </option>
+</select>
+
         <select name="frequency" id="frequencySelect" required>
           <option value="">Frequency</option>
           <option value="Once a week" data-multiplier="1" data-days="1">Once / Week</option>
@@ -1357,7 +1366,8 @@ function closeAddress() {
 document.addEventListener("DOMContentLoaded", function () {
 
   const emailInput = document.getElementById("customerEmail");
-  const productInput = document.getElementById("productInput");
+ const productSelect = document.getElementById("productSelect");
+
   const frequencySelect = document.getElementById("frequencySelect");
   const quantityInput = document.getElementById("quantityInput");
   const totalField = document.getElementById("calculatedTotal");
@@ -1435,7 +1445,8 @@ document.addEventListener("DOMContentLoaded", function () {
   =============================== */
   async function fetchVariantPrice() {
 
-    const product = productInput.value.trim();
+    const product = productSelect.value.trim();
+
     const frequency = frequencySelect.value;
 
     if (!product || !frequency) {
@@ -1500,7 +1511,8 @@ document.addEventListener("DOMContentLoaded", function () {
   /* ===============================
      EVENT BINDINGS
   =============================== */
-  productInput.addEventListener("blur", fetchVariantPrice);
+  productSelect.addEventListener("change", fetchVariantPrice);
+
   quantityInput.addEventListener("input", calculateTotal);
   periodRadios.forEach(r => r.addEventListener("change", calculateTotal));
 

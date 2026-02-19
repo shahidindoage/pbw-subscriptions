@@ -19,6 +19,8 @@ import { addDays, nextDay, differenceInHours  } from "date-fns"; // npm i date-f
 import cloudinary from "./utils/cloudinary.js";
 import { getVariantByProductAndFrequency } from "./utils/getVariantByProductAndFrequency.js";
 import shopifyCronRoute from "./routes/shopifyCronRoute.js";
+import { getShopifyToken } from "./utils/shopifyTokenManager.js";
+
 
 dotenv.config();
 
@@ -96,7 +98,39 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_SECRET,
 });
 
+app.get("/api/products", async (req, res) => {
+  try {
+    const accessToken = await getShopifyToken();
 
+    const response = await axios.get(
+      `https://${process.env.SHOPIFY_STORE}/admin/api/2026-01/products.json`,
+      {
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+        params: {
+          fields: "id,title",
+          limit: 250
+        }
+      }
+    );
+
+    const products = response.data.products || [];
+
+    // Return only id + name
+    const formatted = products.map(p => ({
+      id: p.id,
+      name: p.title
+    }));
+
+    res.json(formatted);
+
+  } catch (error) {
+    console.error("Error fetching products:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
 // Admin routes
 
 // Middleware to protect admin routes
