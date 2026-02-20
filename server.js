@@ -972,7 +972,24 @@ function ist11AMToUTC(date) {
   d.setHours(11, 0, 0, 0);        // 11:00 AM IST (logical)
   return new Date(d.getTime() - (5.5 * 60 * 60 * 1000)); // IST → UTC
 }
+function calculateDeliveryFee(totalAmount, previousSubs, period, frequency) {
+  let frequencyCount = 1;
 
+  if (frequency.toLowerCase().includes("twice")) {
+    frequencyCount = 2;
+  } else if (frequency.toLowerCase().includes("thrice")) {
+    frequencyCount = 3;
+  }
+
+  const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
+  const currentIsHighValue = totalAmount > 5000;
+
+  if (!hasHighValueSub && !currentIsHighValue) {
+    return 60 * period * frequencyCount;
+  }
+
+  return 0;
+}
 app.post("/create-subscription", async (req, res) => {
   try {
     const {
@@ -984,7 +1001,7 @@ app.post("/create-subscription", async (req, res) => {
       frequency,
       quantity,
       period,
-      deliveryDays, // ["Mon","Wed"]
+      deliveryDays,
       totalAmount,
       address
     } = req.body;
@@ -1021,212 +1038,165 @@ app.post("/create-subscription", async (req, res) => {
     }
 
     // ===============================
-    // 🔍 Delivery fee eligibility
+    // 2️⃣ Calculate nextShippingDate FIRST
     // ===============================
+    const now = new Date();
+    const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+    const todayDay = now.getDay();
+    const cutoff = new Date(now);
+    cutoff.setHours(9, 0, 0, 0);
+
+    const minShippingTime = addDays(now, 1);
+
+    let nextShippingDate = null;
+
+    for (let i = 0; i <= 14; i++) {
+      const candidate = addDays(now, i);
+      const candidateDay = candidate.getDay();
+
+      if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
+
+      const shippingUTC = ist11AMToUTC(candidate);
+
+      if (shippingUTC < minShippingTime) continue;
+
+      if (todayDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) continue;
+
+      if (candidateDay === todayDay && now >= cutoff) continue;
+
+      nextShippingDate = shippingUTC;
+      break;
+    }
+
+    if (!nextShippingDate) {
+      throw new Error("No valid next shipping date found");
+    }
+
+    // ===============================
+    // 3️⃣ Advanced Delivery Fee Logic (NOW SAFE)
+    // ===============================
+
+    const baseShippingDate = new Date(nextShippingDate);
     let finalDeliveryFee = 0;
+
+    const parsedPeriod = Number(period);
+    const parsedTotalAmount = Number(totalAmount);
+
     const previousSubs = await prisma.subscription.findMany({
       where: {
         customerId: dbCustomer.id,
-        status: { in: ["active", "stopped"] },
+        status: "active",
       },
-      select: { totalAmount: true },
+      select: {
+        frequency: true,
+        period: true,
+        nextShippingDate: true,
+        totalAmount: true,
+      }
     });
+
+    function getFrequencyMultiplier(freq) {
+      if (freq === "Once a week" || freq === "Once / Week") return 1;
+      if (freq === "Twice a week" || freq === "Twice / Week") return 2;
+      if (freq === "Thrice a week" || freq === "Thrice / Week") return 3;
+      return 1;
+    }
+
+    const frequencyMultiplier = getFrequencyMultiplier(frequency);
+
+    function generateShipmentDates(startDate, period, frequencyMultiplier) {
+      const dates = [];
+
+      for (let week = 0; week < period; week++) {
+        for (let f = 0; f < frequencyMultiplier; f++) {
+          const date = addDays(startDate, week * 7 + (f * 2));
+          dates.push(new Date(date).toDateString());
+        }
+      }
+
+      return dates;
+    }
+
+    const newShipmentDates = generateShipmentDates(
+      baseShippingDate,
+      parsedPeriod,
+      frequencyMultiplier
+    );
+
+    const existingShipmentDates = new Set();
+
+    for (const sub of previousSubs) {
+      const subMultiplier = getFrequencyMultiplier(sub.frequency);
+
+      const subDates = generateShipmentDates(
+        sub.nextShippingDate,
+        sub.period,
+        subMultiplier
+      );
+
+      subDates.forEach(d => existingShipmentDates.add(d));
+    }
+
+    let chargeableDeliveries = 0;
+
+    for (const date of newShipmentDates) {
+      if (!existingShipmentDates.has(date)) {
+        chargeableDeliveries++;
+      }
+    }
+
     const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
-    const currentIsHighValue = totalAmount > 5000;
+    const currentIsHighValue = parsedTotalAmount > 5000;
 
-    // Convert frequency string to number
-let frequencyCount = 1;
-
-if (frequency.toLowerCase().includes("twice")) {
-  frequencyCount = 2;
-} else if (frequency.toLowerCase().includes("thrice")) {
-  frequencyCount = 3;
-}
-
-   if (!hasHighValueSub && !currentIsHighValue) {
-  finalDeliveryFee = 60 * period * frequencyCount;
-}
-
+    if (!hasHighValueSub && !currentIsHighValue) {
+      finalDeliveryFee = chargeableDeliveries * 60;
+    }
 
     // ===============================
-    // 2️⃣ Create Razorpay Order
+    // 4️⃣ Create Razorpay Order
     // ===============================
-    const finalPayableAmount = totalAmount + finalDeliveryFee;
+    const finalPayableAmount = parsedTotalAmount + finalDeliveryFee;
+
     const order = await razorpay.orders.create({
       amount: Math.round(finalPayableAmount * 100),
       currency: "INR",
       receipt: `rcpt_${Date.now()}`,
       notes: {
         product,
-        frequency: frequency.toString(),
+        frequency,
         quantity: quantity.toString(),
         period: period.toString(),
         deliveryDays: deliveryDays.join(","),
-        baseAmount: totalAmount.toString(),
+        baseAmount: parsedTotalAmount.toString(),
         deliveryFee: finalDeliveryFee.toString(),
       },
     });
 
     // ===============================
-    // 3️⃣ Cut-off logic + first nextShippingDate
+    // 5️⃣ End date
     // ===============================
-    const now = new Date();
-    
+    const subscriptionEndDate = addDays(nextShippingDate, parsedPeriod * 7);
 
-    const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
-    const todayDay = now.getDay();
-    const cutoff = new Date(now);
-    cutoff.setHours(11, 0, 0, 0);
-
-// 🔒 Minimum allowed shipping datetime (24 hours rule)
-const minShippingTime = addDays(now, 1);
-
-let nextShippingDate = null;
-
-for (let i = 0; i <= 14; i++) {
-  const candidate = addDays(now, i);
-  const candidateDay = candidate.getDay();
-
-  // must be a delivery day
-  if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
-
-  const shippingUTC = ist11AMToUTC(candidate);
-
-  // 24-hour rule
-  if (shippingUTC < minShippingTime) continue;
-
-  // Sunday rule: skip Monday
-  if (todayDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
-    continue;
-  }
-
-  // same-day cutoff rule
-  if (candidateDay === todayDay && now >= cutoff) {
-    continue;
-  }
-
-  nextShippingDate = shippingUTC;
-  break;
-}
-
-
-if (!nextShippingDate) {
-  throw new Error("No valid next shipping date found");
-}
-
-
-//     const todayDay = now.getDay();
-// const isTodayDelivery = deliveryDays.some(d => dayMap[d] === todayDay);
-// const isSunday = todayDay === dayMap["Sun"];
-
-// let nextShippingDate = null;
-// let skippedMondayOnSunday = false;
-
-// for (let i = 0; i <= 14; i++) {
-//   const candidate = addDays(now, i);
-//   const candidateDay = candidate.getDay();
-
-//   if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
-
-//   // ✅ SUNDAY RULE: skip ONLY Monday
-//   if (
-//     isSunday &&
-//     candidateDay === dayMap["Mon"] &&
-//     !skippedMondayOnSunday
-//   ) {
-//     skippedMondayOnSunday = true;
-//     continue;
-//   }
-
-//   // ✅ Delivery-day cut-off rule
-//   if (isTodayDelivery && now >= cutoff && candidateDay === todayDay) {
-//     continue;
-//   }
-
-//   candidate.setHours(11, 0, 0, 0);
-//   nextShippingDate = candidate;
-//   break;
-// }
-
-  //   const todayDay = now.getDay();
-  //   const isTodayDelivery = deliveryDays.some(d => dayMap[d] === todayDay);
-  //   let nextShippingDate = null;
-  //   let skippedOnce = false;
-
-  //   for (let i = 0; i <= 14; i++) {
-  //     const candidate = addDays(now, i);
-
-  //     if (!deliveryDays.some(d => dayMap[d] === candidate.getDay())) continue;
-
-  //      // ⛔ Skip first eligible day if purchase on non-delivery day, except Sunday
-  // if (!isTodayDelivery && !skippedOnce && candidate.getDay() !== dayMap["Sun"]) {
-  //   skippedOnce = true;
-  //   continue;
-  // }
-
-  //     // ⛔ Skip first eligible day if purchase on delivery day after 11 AM
-  //     if (isTodayDelivery && now >= cutoff && !skippedOnce) {
-  //       skippedOnce = true;
-  //       continue;
-  //     }
-
-  //     candidate.setHours(11, 0, 0, 0);
-  //     nextShippingDate = candidate;
-  //     break;
-  //   }
-// let nextShippingDate = null;
-// let skipFirstEligible = now >= cutoff; // 👈 only cutoff decides skip
-
-// for (let i = 0; i <= 14; i++) {
-//   const candidate = addDays(now, i);
-
-//   // must be a delivery day
-//   if (!deliveryDays.some(d => dayMap[d] === candidate.getDay())) continue;
-
-//   // skip first eligible if after cutoff
-//   if (skipFirstEligible) {
-//     skipFirstEligible = false;
-//     continue;
-//   }
-
-//   candidate.setHours(11, 0, 0, 0);
-//   nextShippingDate = candidate;
-//   break;
-// }
-
-    // if (!nextShippingDate) {
-    //   return res.status(400).json({ error: "Invalid delivery days" });
-    // }
-
-    // ===============================
-    // 4️⃣ Correct subscriptionEndDate
-    // ===============================
-    const subscriptionEndDate = addDays(nextShippingDate, period * 7);
-    const createdAt = now;
-
-    // ===============================
-    // 5️⃣ Store subscription
-    // ===============================
     const sub = await prisma.subscription.create({
       data: {
         razorpayOrderId: order.id,
         product,
         variantId,
-        frequency: frequency.toString(),
+        frequency,
         quantity,
-        period,
+        period: parsedPeriod,
         deliveryDays: deliveryDays.join(","),
-        totalAmount,
+        totalAmount: parsedTotalAmount,
         deliveryFee: finalDeliveryFee,
         status: "pending",
         customerId: dbCustomer.id,
         isOneTimePurchase: false,
         subscriptionEndDate,
-        createdAt,  
         nextShippingDate,
         address: address || null,
       },
     });
+
 
     // ===============================
     // 6️⃣ Welcome Email
@@ -1396,26 +1366,7 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
       parsedPeriod *
       frequencyMultiplier;
 
-    // ===============================
-    // 5️⃣ Delivery Fee Logic
-    // ===============================
-
-    let finalDeliveryFee = 0;
-
-    const previousSubs = await prisma.subscription.findMany({
-      where: {
-        customerId: dbCustomer.id,
-        status: { in: ["active", "stopped"] },
-      },
-      select: { totalAmount: true },
-    });
-
-    const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
-    const currentIsHighValue = parsedTotalAmount > 5000;
-
-    if (!hasHighValueSub && !currentIsHighValue) {
-      finalDeliveryFee = 60 * parsedPeriod * frequencyMultiplier;
-    }
+   
 
     // ===============================
     // 6️⃣ Shipping Date Calculation
@@ -1424,7 +1375,7 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
     const startDay = startDate.getDay();
 
     const cutoff = new Date(startDate);
-    cutoff.setHours(11, 0, 0, 0);
+    cutoff.setHours(9, 0, 0, 0);
 
     const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
 
@@ -1455,6 +1406,82 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
     if (!nextShippingDate) {
       return res.status(400).json({ error: "No valid next shipping date found" });
     }
+const baseShippingDate = new Date(nextShippingDate);
+
+     // ===============================
+    // 5️⃣ Delivery Fee Logic
+    // ===============================
+
+    // ===============================
+// 5️⃣ Delivery Fee Logic (Advanced Overlap Check)
+// ===============================
+
+let finalDeliveryFee = 0;
+
+// 1️⃣ Get previous ACTIVE subscriptions
+const previousSubs = await prisma.subscription.findMany({
+  where: {
+    customerId: dbCustomer.id,
+    status: "active",
+  },
+});
+
+// 2️⃣ Helper to generate shipment dates
+function generateShipmentDates(startDate, period, frequencyMultiplier) {
+  const dates = [];
+  for (let week = 0; week < period; week++) {
+    for (let f = 0; f < frequencyMultiplier; f++) {
+      const date = addDays(startDate, week * 7 + (f * 2)); 
+      // ⚠ adjust if you have real weekday logic
+      dates.push(new Date(date).toDateString());
+    }
+  }
+  return dates;
+}
+
+// 3️⃣ Generate new subscription shipment dates
+const newShipmentDates = generateShipmentDates(
+  baseShippingDate,
+  parsedPeriod,
+  frequencyMultiplier
+);
+function getFrequencyMultiplier(freq) {
+  if (freq === "Once a week" || freq === "Once / Week") return 1;
+  if (freq === "Twice a week" || freq === "Twice / Week") return 2;
+  if (freq === "Thrice a week" || freq === "Thrice / Week") return 3;
+  return 1;
+}
+// 4️⃣ Collect existing shipment dates
+const existingShipmentDates = new Set();
+
+for (const sub of previousSubs) {
+  const subMultiplier = getFrequencyMultiplier(sub.frequency);
+
+  const subDates = generateShipmentDates(
+    sub.nextShippingDate,
+    sub.period,
+    subMultiplier
+  );
+
+  subDates.forEach(d => existingShipmentDates.add(d));
+}
+
+// 5️⃣ Charge only for non-overlapping dates
+let chargeableDeliveries = 0;
+
+for (const date of newShipmentDates) {
+  if (!existingShipmentDates.has(date)) {
+    chargeableDeliveries++;
+  }
+}
+
+// 6️⃣ Apply high value rule
+const hasHighValueSub = previousSubs.some(s => s.totalAmount > 5000);
+const currentIsHighValue = parsedTotalAmount > 5000;
+
+if (!hasHighValueSub && !currentIsHighValue) {
+  finalDeliveryFee = chargeableDeliveries * 60;
+}
 
     // ===============================
     // 7️⃣ Subscription End Date
