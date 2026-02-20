@@ -1268,8 +1268,24 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
     // 1️⃣ Basic Validation
     // ===============================
 
-    if (!name || !email || !product || !frequency || !quantity || !period) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!name ) {
+      return res.status(400).json({ error: "Missing required fields:name" });
+    }
+     if (!email ) {
+      return res.status(400).json({ error: "Missing required fields:email" });
+    }
+     if ( !product ) {
+      return res.status(400).json({ error: "Missing required fields:product" });
+    }
+     if (!frequency ) {
+      return res.status(400).json({ error: "Missing required fields:freq" });
+    }
+
+     if (!quantity ) {
+      return res.status(400).json({ error: "Missing required fields:quantity" });
+    }
+     if ( !period) {
+      return res.status(400).json({ error: "Missing required fields:period" });
     }
 
     if (!subscriptionStartDate) {
