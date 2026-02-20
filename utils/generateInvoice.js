@@ -1,5 +1,5 @@
-import chromium from "chrome-aws-lambda";
-import puppeteer from "puppeteer-core";
+
+import puppeteer from "puppeteer";
 import fs from "fs";
 import path from "path";
 
@@ -349,10 +349,14 @@ const supplyDate = shippingDate;
   `;
 
   const browser = await puppeteer.launch({
-  args: chromium.args,
-  defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath,
-  headless: chromium.headless,
+  headless: "new",
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--single-process",
+    "--no-zygote",
+  ],
 });
 
   const page = await browser.newPage();
