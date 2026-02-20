@@ -16,7 +16,7 @@ import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
  * - Skips paused, canceled, expired subscriptions
  */
 export async function runSubscriptionScheduler({ testMode = false } = {}) {
-  // ⏱️ Use real time in production
+  // ⏱️ Use real time in production "2026-02-20T12:00:00+05:30"
   const now = new Date();
 
   console.log("🕒 Scheduler running at:", now.toISOString());
