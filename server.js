@@ -990,6 +990,28 @@ function calculateDeliveryFee(totalAmount, previousSubs, period, frequency) {
 
   return 0;
 }
+function generateRealShipmentDates(startDate, period, deliveryDays) {
+  const dates = [];
+  const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+
+  const allowedDays = deliveryDays.map(d => dayMap[d]);
+
+  const endDate = addDays(new Date(startDate), period * 7);
+
+  let current = new Date(startDate);
+  current.setHours(0,0,0,0);
+
+  while (current < endDate) {
+    if (allowedDays.includes(current.getDay())) {
+      const cleanDate = new Date(current);
+      cleanDate.setHours(0,0,0,0);
+      dates.push(cleanDate.toDateString());
+    }
+    current = addDays(current, 1);
+  }
+
+  return dates;
+}
 app.post("/create-subscription", async (req, res) => {
   try {
     const {
@@ -1083,59 +1105,42 @@ app.post("/create-subscription", async (req, res) => {
     const parsedTotalAmount = Number(totalAmount);
 
     const previousSubs = await prisma.subscription.findMany({
-      where: {
-        customerId: dbCustomer.id,
-        status: "active",
-      },
-      select: {
-        frequency: true,
-        period: true,
-        nextShippingDate: true,
-        totalAmount: true,
-      }
-    });
+  where: {
+    customerId: dbCustomer.id,
+    status: "active",
+  },
+  select: {
+    period: true,
+    nextShippingDate: true,
+    totalAmount: true,
+    deliveryDays: true,   // ✅ ADD THIS
+  }
+});
 
-    function getFrequencyMultiplier(freq) {
-      if (freq === "Once a week" || freq === "Once / Week") return 1;
-      if (freq === "Twice a week" || freq === "Twice / Week") return 2;
-      if (freq === "Thrice a week" || freq === "Thrice / Week") return 3;
-      return 1;
-    }
+  
 
-    const frequencyMultiplier = getFrequencyMultiplier(frequency);
+const newShipmentDates = generateRealShipmentDates(
+  nextShippingDate,
+  parsedPeriod,
+  deliveryDays
+);
+    
 
-    function generateShipmentDates(startDate, period, frequencyMultiplier) {
-      const dates = [];
-
-      for (let week = 0; week < period; week++) {
-        for (let f = 0; f < frequencyMultiplier; f++) {
-          const date = addDays(startDate, week * 7 + (f * 2));
-          dates.push(new Date(date).toDateString());
-        }
-      }
-
-      return dates;
-    }
-
-    const newShipmentDates = generateShipmentDates(
-      baseShippingDate,
-      parsedPeriod,
-      frequencyMultiplier
-    );
+    
 
     const existingShipmentDates = new Set();
 
-    for (const sub of previousSubs) {
-      const subMultiplier = getFrequencyMultiplier(sub.frequency);
+  for (const sub of previousSubs) {
+  const subDeliveryDays = sub.deliveryDays.split(",").map(d => d.trim());
 
-      const subDates = generateShipmentDates(
-        sub.nextShippingDate,
-        sub.period,
-        subMultiplier
-      );
+  const subDates = generateRealShipmentDates(
+    sub.nextShippingDate,
+    sub.period,
+    subDeliveryDays
+  );
 
-      subDates.forEach(d => existingShipmentDates.add(d));
-    }
+  subDates.forEach(d => existingShipmentDates.add(d));
+}
 
     let chargeableDeliveries = 0;
 
