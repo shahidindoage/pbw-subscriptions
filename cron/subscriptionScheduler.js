@@ -173,12 +173,21 @@ console.log("Converted Variant ID:", numericVariantId);
 const invoiceNumber = `INV-${shopifyOrder.order_number}`;
 
 // 2️⃣ Generate PDF Buffer
+// const invoiceBuffer = await generateInvoiceBuffer(
+//   shopifyOrder,
+//   sub,
+//   sub.customer,
+//   invoiceNumber,
+//   shippingDate
+// );
+
 const invoiceBuffer = await generateInvoiceBuffer(
   shopifyOrder,
   sub,
   sub.customer,
   invoiceNumber,
-  shippingDate
+  shippingDate,
+  prisma  // 👈 pass prisma here
 );
 
 const invoiceUrl = await uploadInvoiceToDropbox(
