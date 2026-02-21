@@ -7,9 +7,10 @@ export async function generateInvoiceBuffer(
   subscription,
   customer,
   invoiceNumber,
-  shippingDate
+  shippingDate,
+  prisma   // 👈 ADD THIS PARAM
 ) {
-  return new Promise((resolve, reject) => {
+
     try {
       const doc = new PDFDocument({
         size: "A4",
@@ -17,8 +18,7 @@ export async function generateInvoiceBuffer(
       });
 
       const buffers = [];
-      doc.on("data", buffers.push.bind(buffers));
-      doc.on("end", () => resolve(Buffer.concat(buffers)));
+doc.on("data", buffers.push.bind(buffers));
 
       const pageWidth = 595;
       const pageHeight = 842;
@@ -43,8 +43,47 @@ export async function generateInvoiceBuffer(
       const gstPercent = 5;
       const gstValue = (singleTotal * gstPercent) / 100;
       const singleTotalWithGst = singleTotal - gstValue;
-      const deliveryFee =
-        (subscription.deliveryFee || 0) / (period * frequency);
+     
+
+
+      const deliveriesPerWeek = subscription.deliveryDays
+  ? subscription.deliveryDays.split(",").length
+  : 1;
+
+const totalDeliveries = deliveriesPerWeek * period;
+
+const calculatedPerOrderDeliveryFee =
+  totalDeliveries > 0
+    ? (subscription.deliveryFee || 0) / totalDeliveries
+    : 0;
+
+/* ---------------- SAME DAY CHECK ---------------- */
+
+const startOfDay = new Date(shippingDate);
+startOfDay.setHours(0, 0, 0, 0);
+
+const endOfDay = new Date(startOfDay);
+endOfDay.setDate(endOfDay.getDate() + 1);
+
+const existingOrderSameDay = await prisma.shopifyOrder.findFirst({
+  where: {
+    subscriptionId: order.subscriptionId,
+    shippingDate: {
+      gte: startOfDay,
+      lt: endOfDay,
+    },
+    id: {
+      lt: order.id,
+    },
+  },
+});
+
+let deliveryFee = 0;
+
+if (!existingOrderSameDay) {
+  deliveryFee = calculatedPerOrderDeliveryFee;
+}
+
       const grandTotal = singleTotal + deliveryFee;
 
       /* ---------------- NUMBER TO WORDS ---------------- */
@@ -928,29 +967,16 @@ doc.font("Helvetica")
    );
 
 cursorY += signatureHeight;
-      /* ---------------- TOTAL BLOCK ---------------- */
+    
+     doc.end();
 
-      // cell(startX, cursorY, pageWidth - 180, 30, "TOTAL IN WORDS:\n" + amountInWords);
-      // cell(pageWidth - 160, cursorY, 140, 30, grandTotal.toFixed(2), "center", true);
-
-      // cursorY += 80;
-
-      /* ---------------- IMAGES ---------------- */
-
-      // const paidImagePath = path.resolve("public/paid-img.PNG");
-      // const signImagePath = path.resolve("public/sign-img.PNG");
-
-      // if (fs.existsSync(paidImagePath))
-      //   doc.image(paidImagePath, startX, pageHeight - 120, { height: 50 });
-
-      // if (fs.existsSync(signImagePath))
-      //   doc.image(signImagePath, pageWidth - 160, pageHeight - 120, { height: 40 });
-
-      doc.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
+return await new Promise((resolve) => {
+  doc.on("end", () => resolve(Buffer.concat(buffers)));
+});
+   } catch (err) {
+  throw err;
+}
+ 
 }
 
 
