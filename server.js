@@ -996,18 +996,18 @@ function generateRealShipmentDates(startDate, period, deliveryDays) {
 
   const allowedDays = deliveryDays.map(d => dayMap[d]);
 
-  const endDate = addDays(new Date(startDate), period * 7);
+  const base = new Date(startDate);
+  base.setHours(0,0,0,0);
 
-  let current = new Date(startDate);
-  current.setHours(0,0,0,0);
+  for (let week = 0; week < period; week++) {
+    for (let day = 0; day < 7; day++) {
+      const current = new Date(base);
+      current.setDate(base.getDate() + week * 7 + day);
 
-  while (current < endDate) {
-    if (allowedDays.includes(current.getDay())) {
-      const cleanDate = new Date(current);
-      cleanDate.setHours(0,0,0,0);
-      dates.push(cleanDate.toDateString());
+      if (allowedDays.includes(current.getDay())) {
+        dates.push(current.toDateString());
+      }
     }
-    current = addDays(current, 1);
   }
 
   return dates;
