@@ -83,6 +83,25 @@ export async function generateInvoiceBuffer(
 
       const amountInWords = numberToWords(grandTotal);
 
+      const productHsnMap = {
+  "Nuts & Seed Milk Alternative Almond+ | 250 ml": "20098990",
+  "Nuts & Seed Milk Alternative Oats+ | 250 ml": "22029990",
+  "Nuts & Seed Curd Alternative Peanut + | 500 g": "20081100",
+  "100% Whole Wheat Bread | 250 g": "19052000",
+  "Whole Multigrain & Seed Bread | 250 g": "19051000",
+  "Cashew Mustard Spread 250 g": "2103",
+  "Nuts & Seed Butter Alternative Mighty Dozen | 250 g": "20081100",
+  "Oatmeal Bowl 300 g": "9963",
+  "Sprouts Salad | 250 g": "2106",
+  "Berry Blast | 250 ml": "22029990",
+  "Green Juice | 1 L": "20099000",
+  "Green Juice | 250 ml": "20099000",
+  "Nut & Seed Granola 150 g": "2008",
+};
+
+// Get HSN based on subscription.product
+const hsnCode = productHsnMap[subscription.product] || "-";
+
       /* ---------------- PAGE BORDER ---------------- */
 
       doc.rect(10, 10, pageWidth - 20, pageHeight - 20).stroke();
@@ -92,14 +111,14 @@ export async function generateInvoiceBuffer(
       doc.font("Helvetica-Bold").fontSize(22)
         .text("TAX INVOICE", startX, cursorY);
 
-      doc.fontSize(10).font("Helvetica")
+      doc.fontSize(9).font("Helvetica-Bold")
         .text("GSTIN: 06AAOCP2140F1ZM", startX, cursorY + 30)
         .text("CIN: U10797DL2023PTC422253", startX, cursorY + 45);
 
       doc.font("Helvetica-Bold")
-        .text("ORIGINAL", pageWidth - 120, cursorY + 5)
-        .font("Helvetica")
-        .text("FSSAI LIC NO.: 13324999000116", pageWidth - 180, cursorY + 25);
+        .text("ORIGINAL", pageWidth - 120, cursorY + 2, { align: "right" })
+        .font("Helvetica-Bold")
+        .text("FSSAI LIC NO.: 13324999000116", pageWidth - 180, cursorY + 15, { align: "right" });
 
       cursorY += 80;
 
@@ -108,62 +127,316 @@ export async function generateInvoiceBuffer(
 
       cursorY += 15;
 
-      doc.font("Helvetica").fontSize(9)
+      doc.font("Helvetica").fontSize(8)
         .text(
-          "PBW Foods Private Limited, DLF Cyber City Rd, Gurugram - 122002, Haryana, India",
+          "PBW Foods Private Limited, Bldg #5, Epitome, Ground Floor, DLF Cyber City Rd, Phase 3, Sector 24, Gurugram - 122002, Haryana, India",
           0,
           cursorY,
           { align: "center" }
         );
 
-      cursorY += 30;
+      cursorY += 20;
+
+      const footerColW = (pageWidth - 40) / 3;
+let footerX = startX;
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+
+/* EMAIL */
+doc.text(
+  "email@pbwfoods.com ",
+  footerX,
+  cursorY,
+  { width: footerColW, align: "center" }
+)
+
+/* WEBSITE */
+.text(
+  "www.pbwfoods.com",
+  footerX + footerColW,
+  cursorY,
+  { width: footerColW, align: "center" }
+)
+
+/* PHONE */
+.text(
+  "080-47360729",
+  footerX + footerColW * 2,
+  cursorY,
+  { width: footerColW, align: "center" }
+);
+
+cursorY += 20;
 
       /* ---------------- TABLE FUNCTION ---------------- */
 
-      function cell(x, y, w, h, text = "", align = "left", bold = false) {
-        doc.rect(x, y, w, h).stroke();
-        doc.font(bold ? "Helvetica-Bold" : "Helvetica")
-          .fontSize(9)
-          .text(text, x + 5, y + 5, { width: w - 10, align });
-      }
+   function cell(
+  x,
+  y,
+  w,
+  h,
+  text = "",
+  align = "left",
+  bold = false,
+  borders = { top: true, right: true, bottom: true, left: true },
+  background = null,          // NEW
+  textColor = "#000000"       // NEW
+) {
+  doc.lineWidth(1);
+
+  /* -------- BACKGROUND -------- */
+  if (background) {
+    doc.save();
+    doc.rect(x, y, w, h).fill(background);
+    doc.restore();
+  }
+
+  /* -------- BORDERS -------- */
+  if (borders.top) {
+    doc.moveTo(x, y).lineTo(x + w, y).stroke();
+  }
+
+  if (borders.right) {
+    doc.moveTo(x + w, y).lineTo(x + w, y + h).stroke();
+  }
+
+  if (borders.bottom) {
+    doc.moveTo(x, y + h).lineTo(x + w, y + h).stroke();
+  }
+
+  if (borders.left) {
+    doc.moveTo(x, y).lineTo(x, y + h).stroke();
+  }
+
+  /* -------- TEXT -------- */
+  doc
+    .fillColor(textColor)
+    .font(bold ? "Helvetica-Bold" : "Helvetica")
+    .fontSize(9)
+    .text(text, x + 5, y + 8, {
+      width: w - 10,
+      align: align,
+    });
+
+  // Reset text color
+  doc.fillColor("#000000");
+}
 
       /* ---------------- 3x3 TABLE ---------------- */
 
       const colW = (pageWidth - 40) / 3;
       const rowH = 28;
 
-      cell(startX, cursorY, colW, rowH, `Invoice No: ${invoiceNumber}`);
-      cell(startX + colW, cursorY, colW, rowH, `Order No: PBW${order.order_number}`);
+      cell(startX, cursorY, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Invoice No: ", startX + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(invoiceNumber, {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Order No: ", startX + colW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(`PBW${order.order_number}`, {
+     width: colW - 10
+   });
       cell(startX + colW * 2, cursorY, colW, rowH);
 
-      cell(startX, cursorY + rowH, colW, rowH, `Invoice Date: ${new Date().toLocaleDateString()}`);
-      cell(startX + colW, cursorY + rowH, colW, rowH, `Order Date: ${new Date().toLocaleDateString()}`);
-      cell(startX + colW * 2, cursorY + rowH, colW, rowH, `Supply: ${new Date(shippingDate).toLocaleDateString()}`);
+      cell(startX, cursorY + rowH, colW, rowH, "");
 
-      cell(startX, cursorY + rowH * 2, colW, rowH, "State: Haryana");
-      cell(startX + colW, cursorY + rowH * 2, colW, rowH, "Code: 6");
-      cell(startX + colW * 2, cursorY + rowH * 2, colW, rowH, `Place: ${subscription.address.city}`);
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Invoice Date: ", startX + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date().toLocaleDateString(), {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY + rowH, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Order Date: ", startX + colW + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date().toLocaleDateString(), {
+     width: colW - 10
+   });
+      cell(startX + colW * 2, cursorY + rowH, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Supply: ", startX + colW * 2 + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date(shippingDate).toLocaleDateString(), {
+     width: colW - 10
+   });
+
+      // Draw empty cell
+cell(startX, cursorY + rowH * 2, colW, rowH, "");
+
+// Bold label + normal value
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("Haryana", {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY + rowH * 2, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Code: ", startX + colW + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("6", {
+     width: colW - 10
+   });
+     cell(startX + colW * 2, cursorY + rowH * 2, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Place: ", startX + colW * 2 + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(subscription.address.city || "-", {
+     width: colW - 10
+   });
 
       cursorY += rowH * 3 + 20;
 
       /* ---------------- BILL / SHIP ---------------- */
 
-      const halfW = (pageWidth - 40) / 2;
+      const totalW = pageWidth - 40;
 
-      cell(startX, cursorY, halfW, 25, "BILL TO PARTY", "center", true);
-      cell(startX + halfW, cursorY, halfW, 25, "SHIP TO PARTY / DELIVERY ADDRESS", "center", true);
+const leftW = totalW * 0.45;   // BILL TO
+const rightW = totalW * 0.55;  // SHIP TO (more space)
 
-      cursorY += 25;
+cell(startX, cursorY, leftW, 25, "BILL TO PARTY", "center", true, undefined, "#f0f0f0");
+cell(startX + leftW, cursorY, rightW, 25, "SHIP TO PARTY / DELIVERY ADDRESS", "center", true, undefined, "#f0f0f0");
 
-      const addressText =
-        `${subscription.address?.line1 || ""}, ${subscription.address?.line2 || ""}, 
-${subscription.address?.city || ""}, ${subscription.address?.state || ""}, 
+cursorY += 25;
+
+const addressText =
+  `${subscription.address?.line1 || ""}, ${subscription.address?.line2 || ""},
+${subscription.address?.city || ""}, ${subscription.address?.state || ""},
 ${subscription.address?.pincode || ""}`;
 
-      cell(startX, cursorY, halfW, 60, `${customer.name}\n${addressText}`);
-      cell(startX + halfW, cursorY, halfW, 60, `${customer.name}\n${addressText}`);
+const nameRowH = 25;
+const addressRowH = 40; // increased height
 
-      cursorY += 60 + 20;
+/* NAME ROW */
+cell(startX, cursorY, leftW, nameRowH, customer.name, "left", true);
+cell(startX + leftW, cursorY, rightW, nameRowH, customer.name, "left", true);
+cursorY += nameRowH;
+
+/* ADDRESS ROW */
+cell(startX, cursorY, leftW, addressRowH, addressText);
+cell(startX + leftW, cursorY, rightW, addressRowH, addressText);
+
+cursorY +=  40;
+
+const phoneRowH = 20;
+
+// Draw empty cell
+cell(startX, cursorY, leftW, phoneRowH, "");
+
+// Bold label
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Phone: ", startX + 5, cursorY + 8, { continued: true });
+
+// Normal value
+doc.font("Helvetica")
+   .text(subscription.address?.phone || "-", {
+     width: leftW - 10
+   });
+
+cell(startX + leftW, cursorY, rightW, phoneRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Phone: ", startX + leftW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(subscription.address?.phone || "-", {
+     width: rightW - 10
+   });
+
+cursorY += phoneRowH;
+
+const infoRowH = 20;
+
+// Split left column
+const leftHalf1 = leftW / 2;
+const leftHalf2 = leftW / 2;
+
+// Split right column
+const rightHalf1 = rightW / 2;
+const rightHalf2 = rightW / 2;
+
+/* LEFT COLUMN PARTITIONS */
+// Draw empty cell first
+cell(startX, cursorY, leftHalf1, infoRowH, "");
+
+// Bold Label
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + 5, cursorY + 8, { continued: true });
+
+// Normal Value
+doc.font("Helvetica")
+   .text(subscription.address?.state || "-", {
+     width: leftHalf1 - 10
+   });
+
+cell(startX + leftHalf1, cursorY, leftHalf2, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Country: ", startX + leftHalf1 + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("India", {
+     width: leftHalf2 - 10
+   });
+
+/* RIGHT COLUMN PARTITIONS */
+cell(startX + leftW, cursorY, rightHalf1, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + leftW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(subscription.address?.state || "-", {
+     width: rightHalf1 - 10
+   });
+
+cell(startX + leftW + rightHalf1, cursorY, rightHalf2, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Country: ", startX + leftW + rightHalf1 + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("India", {
+     width: rightHalf2 - 10
+   });
+
+cursorY += infoRowH + 20;
+
 
       /* ---------------- PRODUCT TABLE ---------------- */
 
@@ -174,7 +447,7 @@ ${subscription.address?.pincode || ""}`;
 
       let x = startX;
       headers.forEach((h, i) => {
-        cell(x, cursorY, cols[i], 25, h, "center", true);
+        cell(x, cursorY, cols[i], 25, h, "center", true, undefined, "#f0f0f0");
         x += cols[i];
       });
 
@@ -182,41 +455,496 @@ ${subscription.address?.pincode || ""}`;
       x = startX;
 
       const row = [
-        "1",
-        subscription.product,
-        "-",
-        quantity.toString(),
-        basePrice.toFixed(2),
-        singleTotalWithGst.toFixed(2),
-        gstPercent.toString(),
-        gstValue.toFixed(2),
-        singleTotal.toFixed(2),
-      ];
+  "1",
+  subscription.product,
+  hsnCode,   // ✅ mapped HSN code here
+  quantity.toString(),
+  basePrice.toFixed(2),
+  singleTotalWithGst.toFixed(2),
+  gstPercent.toString(),
+  gstValue.toFixed(2),
+  singleTotal.toFixed(2),
+];
 
       row.forEach((d, i) => {
-        cell(x, cursorY, cols[i], 30, d, "center");
-        x += cols[i];
-      });
+  cell(x, cursorY, cols[i], 30, d, "center");
+  x += cols[i];
+});
 
-      cursorY += 40;
+cursorY += 30;
 
+// ✅ Add 4 blank rows
+for (let r = 0; r < 3; r++) {
+  let emptyX = startX;
+
+  cols.forEach((colWidth) => {
+    cell(emptyX, cursorY, colWidth, 20, "", "center");
+    emptyX += colWidth;
+  });
+
+  cursorY += 20;
+}
+// ✅ TOTAL ROW
+let totalRowY = cursorY;
+let totalX = startX;
+
+// 1️⃣ Merge first two columns
+const mergedWidth = cols[0] + cols[1];
+cell(totalX, totalRowY, mergedWidth, 20, "TOTAL", "center",  true, undefined, "#f0f0f0");
+totalX += mergedWidth;
+
+// 2️⃣ HSN column (blank)
+cell(totalX, totalRowY, cols[2], 20, "", "center");
+totalX += cols[2];
+
+// 3️⃣ Quantity column (show quantity)
+cell(totalX, totalRowY, cols[3], 20, quantity.toString(), "center", true);
+totalX += cols[3];
+
+// 4️⃣ RATE column (blank)
+cell(totalX, totalRowY, cols[4], 20, "", "center");
+totalX += cols[4];
+
+// 5️⃣ TAXABLE column (blank)
+cell(totalX, totalRowY, cols[5], 20, "", "center");
+totalX += cols[5];
+
+// 6️⃣ GST % column (blank)
+cell(totalX, totalRowY, cols[6], 20, "", "center");
+totalX += cols[6];
+
+// 7️⃣ IGST column (blank)
+cell(totalX, totalRowY, cols[7], 20, "", "center");
+totalX += cols[7];
+
+// 8️⃣ TOTAL column (show final total)
+cell(
+  totalX,
+  totalRowY,
+  cols[8],
+  20,
+  singleTotal.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += 20;
+
+// ===============================
+// EXTRA 3 INFORMATION ROWS
+// ===============================
+
+const rowHeight = 20;
+
+/* ----------------------------------
+   ROW 1
+---------------------------------- */
+
+let infoX = startX;
+
+// Combine first 5 columns
+const firstFiveWidth =
+  cols[0] + cols[1] + cols[2] + cols[3] + cols[4];
+
+cell(infoX, cursorY, firstFiveWidth, rowHeight, "Payment Mode :", "left", true);
+infoX += firstFiveWidth;
+
+// Combine next 3 columns
+const nextThreeWidth = cols[5] + cols[6] + cols[7];
+
+cell(
+  infoX,
+  cursorY,
+  nextThreeWidth,
+  rowHeight,
+  "Total amount before Tax (Rs.)",
+  "left"
+);
+infoX += nextThreeWidth;
+
+// Last column
+cell(
+  infoX,
+  cursorY,
+  cols[8],
+  rowHeight,
+  singleTotalWithGst.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += rowHeight;
+
+
+/* ----------------------------------
+   ROW 2
+---------------------------------- */
+
+infoX = startX;
+
+// First 5 columns
+cell(infoX, cursorY, firstFiveWidth, rowHeight, "Order Note :", "left", true);
+infoX += firstFiveWidth;
+
+// Next 3 columns
+cell(
+  infoX,
+  cursorY,
+  nextThreeWidth,
+  rowHeight,
+  "Total Tax amount (Rs.)",
+  "left"
+);
+infoX += nextThreeWidth;
+
+// Last column
+cell(
+  infoX,
+  cursorY,
+  cols[8],
+  rowHeight,
+  gstValue.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += rowHeight;
+
+
+/* ----------------------------------
+   ROW 3
+---------------------------------- */
+
+infoX = startX;
+
+// First 5 columns
+cell(
+  infoX,
+  cursorY,
+  firstFiveWidth,
+  rowHeight,
+  "Terms and Conditions",
+  "left",
+   true
+);
+infoX += firstFiveWidth;
+
+// Next 3 columns (blank)
+cell(infoX, cursorY, nextThreeWidth, rowHeight, "", "center");
+infoX += nextThreeWidth;
+
+// Last column (blank)
+cell(infoX, cursorY, cols[8], rowHeight, "", "center");
+
+cursorY += rowHeight;
+
+
+
+/* ======================================
+   NEW 4 SUMMARY ROWS
+====================================== */
+
+const rowHeight1 = 20;
+
+// Width calculations (new variable names)
+const summaryFirstFiveWidth =
+  cols[0] + cols[1] + cols[2] + cols[3] + cols[4];
+
+const summaryNextThreeWidth =
+  cols[5] + cols[6] + cols[7];
+
+/* ----------------------------------
+   ROW 1
+---------------------------------- */
+
+let summaryX = startX;
+
+// First 5 columns
+// Draw only bordered empty cell first
+cell(
+  summaryX,
+  cursorY,
+  summaryFirstFiveWidth,
+  rowHeight1,
+  "",
+  "left",
+  false,
+  { top: true, bottom: false, left: true, right: true }
+);
+
+// First Line - Bold
+doc
+  .font("Helvetica-Bold")
+  .fontSize(9)
+  .text(
+    "Total Invoice Amount in Words",
+    summaryX + 5,
+    cursorY + 8,
+    { width: summaryFirstFiveWidth - 10 }
+  );
+
+// Second Line - Normal
+doc
+  .font("Helvetica")
+  .fontSize(9)
+  .text(
+    amountInWords,
+    summaryX + 5,
+    cursorY + 22,
+    { width: summaryFirstFiveWidth - 10 }
+  );
+summaryX += summaryFirstFiveWidth;
+
+// Next 3 columns
+cell(
+  summaryX,
+  cursorY,
+  summaryNextThreeWidth,
+  rowHeight1,
+  "Shipping amount (Rs)",
+  "left"
+);
+summaryX += summaryNextThreeWidth;
+
+// Last column
+cell(
+  summaryX,
+  cursorY,
+  cols[8],
+  rowHeight1,
+  deliveryFee.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += rowHeight1;
+
+/* ----------------------------------
+   ROW 2
+---------------------------------- */
+
+summaryX = startX;
+
+// Blank 5 columns
+cell(summaryX, cursorY, summaryFirstFiveWidth, rowHeight, "", "left",false,
+ 
+ { top: false, bottom: false, left: true, right: true });
+summaryX += summaryFirstFiveWidth;
+
+// Label
+cell(
+  summaryX,
+  cursorY,
+  summaryNextThreeWidth,
+  rowHeight1,
+  "Total amount after Tax (Rs)",
+  "left"
+);
+summaryX += summaryNextThreeWidth;
+
+// Value
+cell(
+  summaryX,
+  cursorY,
+  cols[8],
+  rowHeight1,
+  singleTotal.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += rowHeight1;
+
+/* ----------------------------------
+   ROW 3
+---------------------------------- */
+
+summaryX = startX;
+
+// Blank 5 columns
+cell(summaryX, cursorY, summaryFirstFiveWidth, rowHeight, "", "left",false,
+
+  { top: false, bottom: false, left: true, right: true });
+summaryX += summaryFirstFiveWidth;
+
+// Label
+cell(
+  summaryX,
+  cursorY,
+  summaryNextThreeWidth,
+  rowHeight1,
+  "Round Off",
+  "left"
+);
+summaryX += summaryNextThreeWidth;
+
+// Value
+cell(
+  summaryX,
+  cursorY,
+  cols[8],
+  rowHeight1,
+  "_",
+  "center"
+);
+
+cursorY += rowHeight1;
+
+/* ----------------------------------
+   ROW 4
+---------------------------------- */
+
+summaryX = startX;
+
+// Blank 5 columns
+cell(summaryX, cursorY, summaryFirstFiveWidth, rowHeight, "", "left",false,
+ 
+ { top: false, bottom: true, left: true, right: true });
+summaryX += summaryFirstFiveWidth;
+
+// Label
+cell(
+  summaryX,
+  cursorY,
+  summaryNextThreeWidth,
+  rowHeight1,
+  "TOTAL (Rs)",
+  "left",
+  true
+);
+summaryX += summaryNextThreeWidth;
+
+// Final Total
+cell(
+  summaryX,
+  cursorY,
+  cols[8],
+  rowHeight1,
+  (singleTotal + deliveryFee).toFixed(2),
+  "center",
+  true
+);
+
+cursorY += rowHeight1;
+
+
+
+/* ======================================
+   SIGNATURE ROW
+====================================== */
+
+const signatureHeight = 80;
+
+const leftWidth =
+  cols[0] + cols[1] + cols[2] + cols[3] + cols[4];
+
+const rightWidth =
+  cols[5] + cols[6] + cols[7] + cols[8];
+
+let signX = startX;
+
+/* ---------- LEFT SIDE ---------- */
+
+cell(
+  signX,
+  cursorY,
+  leftWidth,
+  signatureHeight,
+  "",
+  "left",
+  false,
+
+  { top: true, bottom: true, left: true, right: false }
+);
+
+// Text
+const topPadding = 10;
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("E. & O.E", signX + 5, cursorY + topPadding);
+
+// Paid Image
+const paidImagePath = path.resolve("public/paid-img.PNG");
+
+if (fs.existsSync(paidImagePath)) {
+  doc.image(
+    paidImagePath,
+    signX + 5,
+    cursorY + 20,
+    { height: 40 }
+  );
+}
+
+signX += leftWidth;
+
+/* ---------- RIGHT SIDE ---------- */
+
+cell(
+  signX,
+  cursorY,
+  rightWidth,
+  signatureHeight,
+  "",
+  "right",
+  false,
+
+  { top: true, bottom: true, left: false, right: true }
+);
+
+// Company Name
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text(
+     "For, PBW Foods Private Limited",
+     signX + 5,
+     cursorY + 10,
+     { width: rightWidth - 10, align: "right" }
+   );
+
+// Signature Image
+const signImagePath = path.resolve("public/sign-img.PNG");
+
+if (fs.existsSync(signImagePath)) {
+
+  const imageWidth = 80; // adjust as needed
+
+  doc.image(
+    signImagePath,
+    signX + rightWidth - imageWidth - 10, // 10 = right padding
+    cursorY + 25,
+    { width: imageWidth }
+  );
+}
+
+// Authorised Signature Text
+doc.font("Helvetica")
+   .fontSize(9)
+   .text(
+     "Authorised Signature",
+     signX + 5,
+     cursorY + 55,
+     { width: rightWidth - 10, align: "right" }
+   );
+
+cursorY += signatureHeight;
       /* ---------------- TOTAL BLOCK ---------------- */
 
-      cell(startX, cursorY, pageWidth - 180, 30, "TOTAL IN WORDS:\n" + amountInWords);
-      cell(pageWidth - 160, cursorY, 140, 30, grandTotal.toFixed(2), "center", true);
+      // cell(startX, cursorY, pageWidth - 180, 30, "TOTAL IN WORDS:\n" + amountInWords);
+      // cell(pageWidth - 160, cursorY, 140, 30, grandTotal.toFixed(2), "center", true);
 
-      cursorY += 80;
+      // cursorY += 80;
 
       /* ---------------- IMAGES ---------------- */
 
-      const paidImagePath = path.resolve("public/paid-img.PNG");
-      const signImagePath = path.resolve("public/sign-img.PNG");
+      // const paidImagePath = path.resolve("public/paid-img.PNG");
+      // const signImagePath = path.resolve("public/sign-img.PNG");
 
-      if (fs.existsSync(paidImagePath))
-        doc.image(paidImagePath, startX, pageHeight - 120, { height: 50 });
+      // if (fs.existsSync(paidImagePath))
+      //   doc.image(paidImagePath, startX, pageHeight - 120, { height: 50 });
 
-      if (fs.existsSync(signImagePath))
-        doc.image(signImagePath, pageWidth - 160, pageHeight - 120, { height: 40 });
+      // if (fs.existsSync(signImagePath))
+      //   doc.image(signImagePath, pageWidth - 160, pageHeight - 120, { height: 40 });
 
       doc.end();
     } catch (err) {
