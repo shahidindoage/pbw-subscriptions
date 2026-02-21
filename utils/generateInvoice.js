@@ -73,7 +73,7 @@ const existingOrderSameDay = await prisma.shopifyOrder.findFirst({
       lt: endOfDay,
     },
     id: {
-      lt: order.id,
+      lt: order.id.toString(),  // ✅ convert to string
     },
   },
 });
