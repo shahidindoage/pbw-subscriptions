@@ -52,6 +52,9 @@ model Subscription {
   address             Json?    // optional customer snapshot
   customerId          String
   customer            Customer @relation(fields: [customerId], references: [id])
+  
+  shipments           SubscriptionShipment[]   // ✅ ADD THIS
+  mode                String?  @default("online")
   shopifyOrders       ShopifyOrder[]
   createdAt           DateTime @default(now())
 
@@ -60,7 +63,40 @@ model Subscription {
   @@index([status])
 }
 
+//
+// =======================
+// Planned Shipments (Per Subscription)
+// =======================
+//
+model SubscriptionShipment {
+  id              String   @id @default(cuid())
+  subscriptionId  String
 
+  shippingDate    DateTime
+  isChargeable    Boolean
+  deliveryFee     Float    @default(0)
+
+  status          String   @default("scheduled")
+  // scheduled
+  // paused
+  // skipped
+  // delivered
+  // cancelled
+
+  pausedAt        DateTime?
+  deliveredAt     DateTime?
+  skippedReason   String?
+
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([subscriptionId, shippingDate])
+  @@index([subscriptionId])
+  @@index([shippingDate])
+  @@index([status])
+}
 //
 // =======================
 // Shopify Orders (Per Delivery)
