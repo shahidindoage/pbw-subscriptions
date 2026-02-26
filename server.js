@@ -1265,14 +1265,19 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Subscription start date required" });
     }
 
-    const startDate = new Date(subscriptionStartDate);
-    if (isNaN(startDate.getTime())) {
-      return res.status(400).json({ error: "Invalid start date" });
-    }
+    // REPLACE WITH:
+const [year, month, day] = subscriptionStartDate.split("T")[0].split("-").map(Number);
+const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
 
-    if (startDate < new Date()) {
-      return res.status(400).json({ error: "Start date cannot be in the past" });
-    }
+if (isNaN(startDate.getTime())) {
+  return res.status(400).json({ error: "Invalid start date" });
+}
+
+const todayUTC = new Date();
+todayUTC.setUTCHours(0, 0, 0, 0);
+if (startDate < todayUTC) {
+  return res.status(400).json({ error: "Start date cannot be in the past" });
+}
 
     // Normalize deliveryDays (can be string if only one selected)
     let normalizedDeliveryDays = [];
@@ -1382,18 +1387,18 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
     // 6️⃣ Shipping Date Calculation
     // ===============================
 
-    const startDay = startDate.getDay();
+   const startDay = startDate.getUTCDay();
 
-    const cutoff = new Date(startDate);
-    cutoff.setHours(9, 0, 0, 0);
+const cutoff = new Date(startDate);
+cutoff.setUTCHours(3, 30, 0, 0); // 9AM IST = 3:30AM UTC
 
-    const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
 
     let nextShippingDate = null;
 
     for (let i = 0; i <= 14; i++) {
       const candidate = addDays(startDate, i);
-      const candidateDay = candidate.getDay();
+      const candidateDay = candidate.getUTCDay();
 
       if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) continue;
 
@@ -1405,7 +1410,7 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
         continue;
       }
 
-      if (candidateDay === startDay && startDate >= cutoff) {
+      if (candidateDay === startDay && startDate.getTime() >= cutoff.getTime()) {
         continue;
       }
 
@@ -1576,7 +1581,7 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
         customerId: dbCustomer.id,
         isOneTimePurchase: false,
         subscriptionEndDate,
-        createdAt: startDate,
+        createdAt: ist9AMToUTC(startDate),
         nextShippingDate,
         address: address || null,
       },
