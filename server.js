@@ -1581,7 +1581,7 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
         customerId: dbCustomer.id,
         isOneTimePurchase: false,
         subscriptionEndDate,
-        createdAt: ist9AMToUTC(startDate),
+        createdAt: startDate,
         nextShippingDate,
         address: address || null,
       },
