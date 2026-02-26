@@ -1267,7 +1267,7 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
 
     // REPLACE WITH:
 const [year, month, day] = subscriptionStartDate.split("T")[0].split("-").map(Number);
-const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+const startDate = new Date(Date.UTC(year, month - 1, day, 6, 30, 0));
 
 if (isNaN(startDate.getTime())) {
   return res.status(400).json({ error: "Invalid start date" });
