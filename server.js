@@ -1265,19 +1265,14 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Subscription start date required" });
     }
 
-    // REPLACE WITH:
-const [year, month, day] = subscriptionStartDate.split("T")[0].split("-").map(Number);
-const startDate = new Date(Date.UTC(year, month - 1, day, 6, 30, 0));
+    const startDate = new Date(subscriptionStartDate);
+    if (isNaN(startDate.getTime())) {
+      return res.status(400).json({ error: "Invalid start date" });
+    }
 
-if (isNaN(startDate.getTime())) {
-  return res.status(400).json({ error: "Invalid start date" });
-}
-
-const todayUTC = new Date();
-todayUTC.setUTCHours(0, 0, 0, 0);
-if (startDate < todayUTC) {
-  return res.status(400).json({ error: "Start date cannot be in the past" });
-}
+    if (startDate < new Date()) {
+      return res.status(400).json({ error: "Start date cannot be in the past" });
+    }
 
     // Normalize deliveryDays (can be string if only one selected)
     let normalizedDeliveryDays = [];
@@ -1387,18 +1382,18 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
     // 6️⃣ Shipping Date Calculation
     // ===============================
 
-   const startDay = startDate.getUTCDay();
+    const startDay = startDate.getDay();
 
-const cutoff = new Date(startDate);
-cutoff.setUTCHours(3, 30, 0, 0); // 9AM IST = 3:30AM UTC
+    const cutoff = new Date(startDate);
+    cutoff.setHours(9, 0, 0, 0);
 
-const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+    const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
 
     let nextShippingDate = null;
 
     for (let i = 0; i <= 14; i++) {
       const candidate = addDays(startDate, i);
-      const candidateDay = candidate.getUTCDay();
+      const candidateDay = candidate.getDay();
 
       if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) continue;
 
@@ -1410,7 +1405,7 @@ const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
         continue;
       }
 
-      if (candidateDay === startDay && startDate.getTime() >= cutoff.getTime()) {
+      if (candidateDay === startDay && startDate >= cutoff) {
         continue;
       }
 
