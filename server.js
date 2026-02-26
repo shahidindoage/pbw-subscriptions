@@ -973,6 +973,11 @@ function ist11AMToUTC(date) {
   d.setHours(11, 0, 0, 0);        // 11:00 AM IST (logical)
   return new Date(d.getTime() - (5.5 * 60 * 60 * 1000)); // IST → UTC
 }
+function ist9AMToUTC(date) {
+  const d = new Date(date);
+  d.setHours(9, 0, 0, 0);
+  return new Date(d.getTime() - (5.5 * 60 * 60 * 1000));
+}
 function calculateDeliveryFee(totalAmount, previousSubs, period, frequency) {
   let frequencyCount = 1;
 
@@ -1079,7 +1084,7 @@ app.post("/create-subscription", async (req, res) => {
 
       if (!deliveryDays.some(d => dayMap[d] === candidateDay)) continue;
 
-      const shippingUTC = ist11AMToUTC(candidate);
+      const shippingUTC = ist9AMToUTC(candidate);
 
       if (shippingUTC < minShippingTime) continue;
 
@@ -1392,7 +1397,7 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
 
       if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) continue;
 
-      const shippingUTC = ist11AMToUTC(candidate);
+      const shippingUTC = ist9AMToUTC(candidate);
 
       if (shippingUTC < minShippingTime) continue;
 
