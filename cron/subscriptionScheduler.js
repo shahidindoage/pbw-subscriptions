@@ -285,7 +285,11 @@ await prisma.shopifyOrder.create({
 // 🧮 CHECK TOTAL DELIVERY LIMIT
 // ===============================
 const deliveriesPerWeek = sub.deliveryDays.split(",").length;
-const totalAllowedOrders = deliveriesPerWeek * sub.period;
+const isMonthly = sub.frequency === "Once a Month" || sub.frequency === "Twice a Month";
+
+const totalAllowedOrders = isMonthly
+  ? Math.round(sub.period / 4) * deliveriesPerWeek  // per month × months
+  : deliveriesPerWeek * sub.period;                  // per week × weeks
 
 const createdOrdersCount = await prisma.shopifyOrder.count({
   where: { subscriptionId: sub.id },
@@ -305,14 +309,37 @@ if (createdOrdersCount >= totalAllowedOrders) {
 }
 
 
+      
       // ➡️ CALCULATE NEXT SHIPPING DATE
-      const deliveryDays = sub.deliveryDays.split(",");
-      let nextDate = addDays(shippingDate, 1);
+const deliveryDays = sub.deliveryDays.split(",");
+// const isMonthly = sub.frequency === "Once a Month" || sub.frequency === "Twice a Month";
 
-      for (let i = 0; i < 14; i++) {
-        if (deliveryDays.some(d => dayMap[d] === nextDate.getDay())) break;
-        nextDate = addDays(nextDate, 1);
-      }
+let nextDate;
+
+if (isMonthly) {
+  if (sub.frequency === "Once a Month") {
+    // Jump ~28 days ahead and find the matching weekday
+    nextDate = addDays(shippingDate, 28);
+    for (let i = 0; i < 7; i++) {
+      if (deliveryDays.some(d => dayMap[d] === nextDate.getDay())) break;
+      nextDate = addDays(nextDate, 1);
+    }
+  } else {
+    // "Twice a Month" — jump ~14 days ahead and find matching weekday
+    nextDate = addDays(shippingDate, 14);
+    for (let i = 0; i < 7; i++) {
+      if (deliveryDays.some(d => dayMap[d] === nextDate.getDay())) break;
+      nextDate = addDays(nextDate, 1);
+    }
+  }
+} else {
+  // Existing weekly logic
+  nextDate = addDays(shippingDate, 1);
+  for (let i = 0; i < 14; i++) {
+    if (deliveryDays.some(d => dayMap[d] === nextDate.getDay())) break;
+    nextDate = addDays(nextDate, 1);
+  }
+}
 
       await prisma.subscription.update({
         where: { id: sub.id },

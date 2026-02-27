@@ -1379,9 +1379,11 @@ function closeAddress() {
 
         <select name="frequency" id="frequencySelect" required>
           <option value="">Frequency</option>
-          <option value="Once a week" data-multiplier="1" data-days="1">Once / Week</option>
-          <option value="Twice a week" data-multiplier="2" data-days="2">Twice / Week</option>
-          <option value="Thrice a week" data-multiplier="3" data-days="3">Thrice / Week</option>
+          <option value="Once a week"  data-multiplier="1" data-days="1" data-monthly="false">Once / Week</option>
+          <option value="Twice a week" data-multiplier="2" data-days="2" data-monthly="false">Twice / Week</option>
+          <option value="Thrice a week" data-multiplier="3" data-days="3" data-monthly="false">Thrice / Week</option>
+          <option value="Once a Month"  data-multiplier="1" data-days="1" data-monthly="true">Once / Month</option>
+          <option value="Twice a Month" data-multiplier="2" data-days="2" data-monthly="true">Twice / Month</option>
         </select>
         <input name="quantity" id="quantityInput" type="number" placeholder="Qty" min="1" required />
 
@@ -1389,9 +1391,9 @@ function closeAddress() {
         <div style="grid-column:1/-1">
           <div class="section-title">Subscription Period</div>
           <div class="period-group">
-            <label><input type="radio" name="period" value="4" required> 4W</label>
-            <label><input type="radio" name="period" value="8"> 8W</label>
-            <label><input type="radio" name="period" value="12"> 12W</label>
+            <label><input type="radio" name="period" value="4" required> <span class="period-label" data-weeks="4W" data-months="1M">4W</span></label>
+            <label><input type="radio" name="period" value="8"> <span class="period-label" data-weeks="8W" data-months="2M">8W</span></label>
+            <label><input type="radio" name="period" value="12"> <span class="period-label" data-weeks="12W" data-months="3M">12W</span></label>
           </div>
         </div>
 
@@ -1487,11 +1489,17 @@ document.addEventListener("DOMContentLoaded", function () {
   frequencySelect.addEventListener("change", function () {
 
     const selected = frequencySelect.options[frequencySelect.selectedIndex];
+    const isMonthly = selected?.dataset.monthly === "true";
 
     allowedDays = Number(selected?.dataset.days || 0);
 
-    // reset all
+    // reset all checkboxes
     deliveryCheckboxes.forEach(cb => cb.checked = false);
+
+    // Update period labels: show weeks for weekly, months for monthly
+    document.querySelectorAll(".period-label").forEach(label => {
+      label.textContent = isMonthly ? label.dataset.months : label.dataset.weeks;
+    });
 
     fetchVariantPrice();
     calculateTotal();
@@ -1505,7 +1513,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (checkedCount > allowedDays) {
         this.checked = false;
-        alert(`You can select only ${allowedDays} delivery day(s)`);
+        const freqLabel = frequencySelect.options[frequencySelect.selectedIndex]?.text || "";
+        alert(`"${freqLabel}" requires exactly ${allowedDays} delivery day(s). Please select only ${allowedDays}.`);
       }
     });
   });
@@ -1551,31 +1560,40 @@ document.addEventListener("DOMContentLoaded", function () {
 
   /* ===============================
      TOTAL CALCULATION
-     Total = basePrice × quantity × period × frequencyMultiplier
+     Weekly : price × qty × period(weeks) × deliveries-per-week
+     Monthly: price × qty × months        × deliveries-per-month
+              months = period / 4   (4W=1M, 8W=2M, 12W=3M)
   =============================== */
   function calculateTotal() {
 
     const quantity = Number(quantityInput.value) || 0;
 
     const selectedOption = frequencySelect.options[frequencySelect.selectedIndex];
-    const multiplier = Number(selectedOption?.dataset.multiplier || 0);
+    const multiplier  = Number(selectedOption?.dataset.multiplier || 0);
+    const isMonthly   = selectedOption?.dataset.monthly === "true";
 
     const selectedPeriod = document.querySelector('input[name="period"]:checked');
-    const period = Number(selectedPeriod?.value || 0);
-
-    console.log("Base:", basePrice);
-    console.log("Qty:", quantity);
-    console.log("Period:", period);
-    console.log("Multiplier:", multiplier);
+    const period = Number(selectedPeriod?.value || 0);   // always in weeks (4 / 8 / 12)
 
     if (!basePrice || !quantity || !period || !multiplier) {
       totalField.value = "";
       return;
     }
 
-    const total = basePrice * quantity * period * multiplier;
+    let totalDeliveries;
+    if (isMonthly) {
+      const months = period / 4;          // 4W→1, 8W→2, 12W→3
+      totalDeliveries = months * multiplier;
+    } else {
+      totalDeliveries = period * multiplier;   // weeks × deliveries/week
+    }
+
+    const total = basePrice * quantity * totalDeliveries;
 
     totalField.value = "₹ " + total.toFixed(2);
+
+    // Debug
+    console.log({ isMonthly, basePrice, quantity, period, multiplier, totalDeliveries, total });
   }
 
   /* ===============================

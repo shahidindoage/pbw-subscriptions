@@ -1265,7 +1265,8 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Subscription start date required" });
     }
 
-    const startDate = new Date(subscriptionStartDate);
+    const startDateRaw = new Date(subscriptionStartDate);
+const startDate = new Date(startDateRaw.getTime() - (5.5 * 60 * 60 * 1000));
     if (isNaN(startDate.getTime())) {
       return res.status(400).json({ error: "Invalid start date" });
     }
@@ -1308,9 +1309,13 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
     if (frequency === "Once a week" || frequency === "Once / Week") frequencyMultiplier = 1;
     else if (frequency === "Twice a week" || frequency === "Twice / Week") frequencyMultiplier = 2;
     else if (frequency === "Thrice a week" || frequency === "Thrice / Week") frequencyMultiplier = 3;
+    else if (frequency === "Once a Month") frequencyMultiplier = 1;
+    else if (frequency === "Twice a Month") frequencyMultiplier = 2;
     else {
       return res.status(400).json({ error: "Invalid frequency selected" });
     }
+
+    const isMonthly = frequency === "Once a Month" || frequency === "Twice a Month";
 
     const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
 
@@ -1370,11 +1375,13 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
   });
 }
     // ✅ FINAL SECURE TOTAL CALCULATION
-    const parsedTotalAmount =
-      variantPrice *
-      parsedQuantity *
-      parsedPeriod *
-      frequencyMultiplier;
+    // Weekly:  price × qty × period(weeks) × deliveries-per-week
+    // Monthly: price × qty × months        × deliveries-per-month  (months = period / 4)
+    const totalDeliveries = isMonthly
+      ? (parsedPeriod / 4) * frequencyMultiplier
+      : parsedPeriod * frequencyMultiplier;
+
+    const parsedTotalAmount = variantPrice * parsedQuantity * totalDeliveries;
 
    
 
@@ -1531,7 +1538,8 @@ const existingDateKeys = new Set(
 const newShipmentDates = generateShipmentDates(
   baseShippingDate,
   parsedPeriod,
-  normalizedDeliveryDays
+  normalizedDeliveryDays,
+  isMonthly
 );
 
 const previousSubs = await prisma.subscription.findMany({
@@ -1552,6 +1560,8 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
     // 7️⃣ Subscription End Date
     // ===============================
 
+    // Weekly: period weeks from first shipment
+    // Monthly: period/4 months (≈ period weeks) from first shipment — same formula works
     const subscriptionEndDate = addDays(
       nextShippingDate,
       parsedPeriod * 7

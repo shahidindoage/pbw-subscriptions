@@ -1,6 +1,6 @@
 // lib/shipmentUtils.js
 
-import { addDays } from "date-fns" ; // or however you import addDays
+import { addDays } from "date-fns";
 
 export const DAY_MAP = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 export const DELIVERY_PRICE = 60;
@@ -21,18 +21,51 @@ export function toDateKey(date) {
 
 /**
  * Generate all real shipping dates for a subscription.
- * Starts from `startDate` (a UTC Date), runs for `period` weeks,
- * only includes days matching `selectedDays` (e.g. ["Tue", "Sun"]).
  *
- * Returns array of UTC Date objects at 11AM IST (5:30AM UTC).
+ * Weekly mode  : picks every matching weekday across period × 7 days.
+ * Monthly mode : picks the chosen day(s) once per 4-week block.
+ *                e.g. "Once a Month"  → 1 date per 28-day block
+ *                     "Twice a Month" → 2 dates per 28-day block
+ *
+ * @param {Date}     startDate    - First shipping date (UTC)
+ * @param {number}   period       - Always in weeks (4 / 8 / 12)
+ * @param {string[]} selectedDays - e.g. ["Tue"] or ["Mon","Thu"]
+ * @param {boolean}  isMonthly    - true for "Once a Month" / "Twice a Month"
+ * @returns {Date[]}
  */
-export function generateShipmentDates(startDate, period, selectedDays) {
+export function generateShipmentDates(startDate, period, selectedDays, isMonthly = false) {
   const dates = [];
+
+  if (isMonthly) {
+    // period is always stored in weeks; months = period / 4
+    const totalMonths = Math.round(period / 4);
+
+    for (let m = 0; m < totalMonths; m++) {
+      // Start of this 28-day month block
+      const blockStart = addDays(startDate, m * 28);
+
+      for (const day of selectedDays) {
+        // Find the first occurrence of this weekday within a 14-day window
+        for (let i = 0; i < 14; i++) {
+          const candidate = addDays(blockStart, i);
+          if (DAY_MAP[day] === candidate.getUTCDay()) {
+            dates.push(candidate);
+            break;
+          }
+        }
+      }
+    }
+
+    // Sort ascending (multiple selectedDays can produce out-of-order results)
+    return dates.sort((a, b) => a - b);
+  }
+
+  // Weekly (original logic)
   const totalDays = period * 7;
 
   for (let i = 0; i < totalDays; i++) {
     const candidate = addDays(startDate, i);
-    const dayOfWeek = candidate.getUTCDay(); // use UTC to avoid timezone drift
+    const dayOfWeek = candidate.getUTCDay();
 
     if (selectedDays.some((d) => DAY_MAP[d] === dayOfWeek)) {
       dates.push(candidate);
@@ -47,14 +80,9 @@ export function generateShipmentDates(startDate, period, selectedDays) {
  * shipment date keys, build shipment records and calculate delivery fee.
  *
  * Rules:
- * - If the customer already has a shipment on that date (any active sub) → NOT chargeable
- * - Otherwise → chargeable (₹60)
- * - If customer has any active sub with totalAmount > 5000, OR new sub > 5000 → all FREE
- *
- * @param {Date[]} newDates
- * @param {Set<string>} existingDateKeys - Set of "YYYY-MM-DD" strings from existing scheduled shipments
- * @param {boolean} waiveAll - true if high value rule applies
- * @returns {{ shipmentRecords: object[], finalDeliveryFee: number }}
+ * - If the customer already has a shipment on that date → NOT chargeable
+ * - Otherwise → chargeable (Rs.60)
+ * - If any active sub > 5000 OR new sub > 5000 → all FREE
  */
 export function buildShipmentRecords(newDates, existingDateKeys, waiveAll) {
   const shipmentRecords = [];
@@ -77,4 +105,3 @@ export function buildShipmentRecords(newDates, existingDateKeys, waiveAll) {
 
   return { shipmentRecords, finalDeliveryFee };
 }
-
