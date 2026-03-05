@@ -331,30 +331,73 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
 
   const { id } = req.params;
   const { action } = req.body;
+  const dayMap = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+
+  // ✅ Fetch subscription first (needed for stop/resume logic)
+  const sub = await prisma.subscription.findUnique({
+    where: { id },
+    include: { customer: true },
+  });
+
+  if (!sub) return res.redirect("/admin/subscriptions");
 
   let data = {};
   let mailType = null;
+  const now = new Date();
 
+  // ===============================
+  // STOP
+  // ===============================
   if (action === "stop") {
+    if (sub.pausedAt) return res.redirect("/admin/subscriptions"); // already stopped
+
     data = {
       status: "stopped",
-      pausedAt: new Date(),
+      pausedAt: now,
     };
     mailType = "stopped";
   }
 
+  // ===============================
+  // RESUME  ← fixed: recalculates nextShippingDate
+  // ===============================
   if (action === "resume") {
+    if (!sub.pausedAt) return res.redirect("/admin/subscriptions"); // not paused
+
+    // Calculate how many days it was paused
+    const pausedMs = now.getTime() - sub.pausedAt.getTime();
+    const pausedDays = Math.max(0, Math.floor(pausedMs / (1000 * 60 * 60 * 24)));
+
+    // Shift both nextShippingDate and subscriptionEndDate forward by paused days
+    let newNextShippingDate = addDays(sub.nextShippingDate, pausedDays);
+    const newEndDate = addDays(sub.subscriptionEndDate, pausedDays);
+
+    // Snap to nearest valid delivery day (within 14-day window)
+    const deliveryDays = sub.deliveryDays?.split(",") || [];
+    for (let i = 0; i < 14; i++) {
+      if (deliveryDays.some(d => dayMap[d] === newNextShippingDate.getDay())) break;
+      newNextShippingDate = addDays(newNextShippingDate, 1);
+    }
+
+    // Ensure it's not in the past
+    if (newNextShippingDate < now) newNextShippingDate = now;
+
     data = {
       status: "active",
       pausedAt: null,
+      nextShippingDate: newNextShippingDate,
+      subscriptionEndDate: newEndDate,
     };
     mailType = "resumed";
   }
 
+  // ===============================
+  // CANCEL
+  // ===============================
   if (action === "cancel") {
     data = {
       status: "cancelled",
-      cancelledAt: new Date(),
+      cancelledAt: now,
       pausedAt: null,
       nextShippingDate: null,
     };
@@ -369,9 +412,7 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
   const subscription = await prisma.subscription.update({
     where: { id },
     data,
-    include: {
-      customer: true,
-    },
+    include: { customer: true },
   });
 
   // ✅ Send email (non-blocking)
@@ -379,11 +420,9 @@ app.post("/admin/subscription/:id/action", async (req, res) => {
     if (mailType === "stopped") {
       await sendSubscriptionStoppedEmail(subscription.customer, subscription);
     }
-
     if (mailType === "resumed") {
       await sendSubscriptionResumedEmail(subscription.customer, subscription);
     }
-
     if (mailType === "cancelled") {
       await sendSubscriptionCancelledEmail(subscription.customer, subscription);
     }
