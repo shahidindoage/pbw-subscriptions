@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Order Details - Admin</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 16px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .card h2 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 18px;
+      color: #111827;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .info-item label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .info-item .value {
+      font-size: 14px;
+      color: #111827;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: #f9fafb;
+      text-align: left;
+      padding: 12px;
+      font-weight: 600;
+      font-size: 12px;
+      color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-refunded { background: #fee2e2; color: #991b1b; }
+    .badge-fulfilled { background: #dbeafe; color: #1e40af; }
+    .badge-unfulfilled { background: #f3f4f6; color: #4b5563; }
+
+    .total-row {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .address-box {
+      background: #f9fafb;
+      padding: 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Order <%= order.orderName || order.orderNumber || order.shopifyOrderId %></h1>
+      <a href="/admin/regular-orders" class="btn btn-secondary">← Back to Orders</a>
+    </div>
+
+    <!-- Order Info -->
+    <div class="card">
+      <h2>Order Information</h2>
+      <div class="info-grid">
+        <div class="info-item">
+          <label>Order Number</label>
+          <div class="value"><%= order.orderName || order.orderNumber || 'N/A' %></div>
+        </div>
+        <div class="info-item">
+          <label>Order Date</label>
+          <div class="value">
+            <%= new Date(order.orderCreatedAt).toLocaleDateString('en-IN', { 
+              day: '2-digit', 
+              month: 'short', 
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }) %>
+          </div>
+        </div>
+        <div class="info-item">
+          <label>Payment Status</label>
+          <div class="value">
+            <% if (order.financialStatus === 'paid') { %>
+              <span class="badge badge-paid">Paid</span>
+            <% } else if (order.financialStatus === 'refunded') { %>
+              <span class="badge badge-refunded">Refunded</span>
+            <% } else { %>
+              <span class="badge badge-pending"><%= order.financialStatus || 'Pending' %></span>
+            <% } %>
+          </div>
+        </div>
+        <div class="info-item">
+          <label>Fulfillment Status</label>
+          <div class="value">
+            <% if (order.fulfillmentStatus === 'fulfilled') { %>
+              <span class="badge badge-fulfilled">Fulfilled</span>
+            <% } else { %>
+              <span class="badge badge-unfulfilled"><%= order.fulfillmentStatus || 'Unfulfilled' %></span>
+            <% } %>
+          </div>
+        </div>
+        <% if (order.invoiceNumber) { %>
+          <div class="info-item">
+            <label>Invoice Number</label>
+            <div class="value"><%= order.invoiceNumber %></div>
+          </div>
+        <% } %>
+        <% if (order.invoiceUrl) { %>
+          <div class="info-item">
+            <label>Invoice</label>
+            <div class="value">
+              <a href="<%= order.invoiceUrl %>" target="_blank" style="color: #2563eb;">
+                📄 Download Invoice
+              </a>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Customer Info -->
+    <div class="card">
+      <h2>Customer Information</h2>
+      <div class="info-grid">
+        <div class="info-item">
+          <label>Name</label>
+          <div class="value"><%= order.customerName || 'N/A' %></div>
+        </div>
+        <div class="info-item">
+          <label>Email</label>
+          <div class="value"><%= order.customerEmail || 'N/A' %></div>
+        </div>
+        <div class="info-item">
+          <label>Phone</label>
+          <div class="value"><%= order.customerPhone || 'N/A' %></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Addresses -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+      <% 
+        const shipping = typeof order.shippingAddress === 'string' 
+          ? JSON.parse(order.shippingAddress) 
+          : order.shippingAddress;
+        const billing = typeof order.billingAddress === 'string'
+          ? JSON.parse(order.billingAddress)
+          : order.billingAddress;
+      %>
+      
+      <% if (shipping) { %>
+        <div class="card">
+          <h2>Shipping Address</h2>
+          <div class="address-box">
+            <% if (shipping.first_name || shipping.last_name) { %>
+              <strong><%= [shipping.first_name, shipping.last_name].filter(Boolean).join(' ') %></strong><br>
+            <% } %>
+            <% if (shipping.address1) { %><%= shipping.address1 %><br><% } %>
+            <% if (shipping.address2) { %><%= shipping.address2 %><br><% } %>
+            <% if (shipping.city || shipping.province || shipping.zip) { %>
+              <%= [shipping.city, shipping.province, shipping.zip].filter(Boolean).join(', ') %><br>
+            <% } %>
+            <% if (shipping.country) { %><%= shipping.country %><br><% } %>
+            <% if (shipping.phone) { %>Phone: <%= shipping.phone %><% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (billing) { %>
+        <div class="card">
+          <h2>Billing Address</h2>
+          <div class="address-box">
+            <% if (billing.first_name || billing.last_name) { %>
+              <strong><%= [billing.first_name, billing.last_name].filter(Boolean).join(' ') %></strong><br>
+            <% } %>
+            <% if (billing.address1) { %><%= billing.address1 %><br><% } %>
+            <% if (billing.address2) { %><%= billing.address2 %><br><% } %>
+            <% if (billing.city || billing.province || billing.zip) { %>
+              <%= [billing.city, billing.province, billing.zip].filter(Boolean).join(', ') %><br>
+            <% } %>
+            <% if (billing.country) { %><%= billing.country %><br><% } %>
+            <% if (billing.phone) { %>Phone: <%= billing.phone %><% } %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- Line Items -->
+    <div class="card">
+      <h2>Order Items</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>SKU</th>
+            <th style="text-align: center;">Quantity</th>
+            <th style="text-align: right;">Price</th>
+            <th style="text-align: right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% 
+            const lineItems = Array.isArray(order.lineItems) 
+              ? order.lineItems 
+              : JSON.parse(order.lineItems || '[]');
+            
+            lineItems.forEach(item => {
+              const price = parseFloat(item.price || 0);
+              const qty = item.quantity || 1;
+              const total = price * qty;
+          %>
+            <tr>
+              <td>
+                <strong><%= item.title || item.name || 'Product' %></strong>
+                <% if (item.variant_title && item.variant_title !== 'Default Title') { %>
+                  <br><small style="color: #6b7280;"><%= item.variant_title %></small>
+                <% } %>
+              </td>
+              <td><%= item.sku || 'N/A' %></td>
+              <td style="text-align: center;"><%= qty %></td>
+              <td style="text-align: right;">₹<%= price.toFixed(2) %></td>
+              <td style="text-align: right;">₹<%= total.toFixed(2) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Order Totals -->
+    <div class="card">
+      <h2>Order Totals</h2>
+      <table>
+        <tbody>
+          <tr>
+            <td>Subtotal</td>
+            <td style="text-align: right;">₹<%= parseFloat(order.subtotalPrice || order.totalPrice || 0).toFixed(2) %></td>
+          </tr>
+          <% if (parseFloat(order.totalTax || 0) > 0) { %>
+            <tr>
+              <td>Tax</td>
+              <td style="text-align: right;">₹<%= parseFloat(order.totalTax).toFixed(2) %></td>
+            </tr>
+          <% } %>
+          <tr class="total-row">
+            <td>Total</td>
+            <td style="text-align: right;">₹<%= parseFloat(order.totalPrice || 0).toFixed(2) %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

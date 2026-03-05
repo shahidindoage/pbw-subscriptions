@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Regular Orders - Admin</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      width: 240px;
+      background: #111827;
+      color: #fff;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .sidebar h3 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .sidebar a {
+      display: block;
+      color: #d1d5db;
+      text-decoration: none;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      transition: background 0.2s, color 0.2s;
+      font-size: 14px;
+    }
+
+    .sidebar a.active,
+    .sidebar a:hover {
+      background: #1f2937;
+      color: #ffffff;
+    }
+
+    .sidebar a:last-child {
+      margin-top: 20px;
+      background: #7c2d12;
+      color: #fff;
+    }
+
+    .sidebar a:last-child:hover {
+      background: #9a3412;
+    }
+
+    /* ===== Content ===== */
+    .content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    /* ===== Search ===== */
+    .search-box {
+      margin-bottom: 20px;
+    }
+
+    .search-box input {
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      outline: none;
+      font-size: 14px;
+      width: 300px;
+    }
+
+    .search-box input:focus {
+      border-color: #2563eb;
+    }
+
+    /* ===== Stats ===== */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .stat-card h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .stat-card p {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    /* ===== Tables ===== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    th {
+      background: #5e8046;
+      color: white;
+      text-align: left;
+      padding: 12px 16px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover {
+      background: #f9fafb;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-refunded { background: #fee2e2; color: #991b1b; }
+    .badge-fulfilled { background: #dbeafe; color: #1e40af; }
+    .badge-unfulfilled { background: #f3f4f6; color: #4b5563; }
+
+    .btn {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-success {
+      background: #059669;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #047857;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #6b7280;
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <h3>Admin Panel</h3>
+      <a href="/admin/dashboard?page=customers">Customers</a>
+      <a href="/admin/dashboard?page=subscriptions">Subscriptions</a>
+      <a href="/admin/dashboard?page=shopify-orders">Subscription Orders</a>
+      <a href="/admin/dashboard?page=invoices">Subscription Invoices</a>
+      <a href="/admin/regular-orders" class="active">Regular Orders</a>
+      <a href="/admin/logout">Logout</a>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <h2>Regular Orders (Non-Subscription)</h2>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat-card">
+          <h3>Total Orders</h3>
+          <p><%= orders.length %></p>
+        </div>
+        <div class="stat-card">
+          <h3>Total Revenue</h3>
+          <p>₹<%= orders.reduce((sum, o) => sum + parseFloat(o.totalPrice || 0), 0).toFixed(2) %></p>
+        </div>
+        <div class="stat-card">
+          <h3>With Invoices</h3>
+          <p><%= orders.filter(o => o.invoiceUrl).length %></p>
+        </div>
+        <div class="stat-card">
+          <h3>Pending Invoices</h3>
+          <p><%= orders.filter(o => !o.invoiceUrl).length %></p>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-box">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search by order number, customer name, or email..."
+          onkeyup="filterTable()"
+        />
+      </div>
+
+      <!-- Orders Table -->
+      <% if (orders.length === 0) { %>
+        <div class="empty-state">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+          <h3>No regular orders yet</h3>
+          <p>Orders from Shopify will appear here automatically</p>
+        </div>
+      <% } else { %>
+        <table id="ordersTable">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Payment</th>
+              <th>Fulfillment</th>
+              <th>Invoice</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% orders.forEach(order => { 
+              const lineItems = Array.isArray(order.lineItems) ? order.lineItems : JSON.parse(order.lineItems || '[]');
+              const itemCount = lineItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            %>
+              <tr>
+                <td>
+                  <strong><%= order.orderName || order.orderNumber || order.shopifyOrderId %></strong>
+                </td>
+                <td>
+                  <%= new Date(order.orderCreatedAt).toLocaleDateString('en-IN', { 
+                    day: '2-digit', 
+                    month: 'short', 
+                    year: 'numeric' 
+                  }) %>
+                </td>
+                <td>
+                  <% if (order.customerName) { %>
+                    <strong><%= order.customerName %></strong><br>
+                  <% } %>
+                  <% if (order.customerEmail) { %>
+                    <small style="color: #6b7280;"><%= order.customerEmail %></small>
+                  <% } %>
+                </td>
+                <td><%= itemCount %> item(s)</td>
+                <td><strong>₹<%= parseFloat(order.totalPrice || 0).toFixed(2) %></strong></td>
+                <td>
+                  <% if (order.financialStatus === 'paid') { %>
+                    <span class="badge badge-paid">Paid</span>
+                  <% } else if (order.financialStatus === 'refunded') { %>
+                    <span class="badge badge-refunded">Refunded</span>
+                  <% } else { %>
+                    <span class="badge badge-pending"><%= order.financialStatus || 'Pending' %></span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (order.fulfillmentStatus === 'fulfilled') { %>
+                    <span class="badge badge-fulfilled">Fulfilled</span>
+                  <% } else { %>
+                    <span class="badge badge-unfulfilled"><%= order.fulfillmentStatus || 'Unfulfilled' %></span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if (order.invoiceUrl) { %>
+                    <a href="<%= order.invoiceUrl %>" target="_blank" class="btn btn-success">
+                      📄 Download
+                    </a>
+                  <% } else { %>
+                    <button class="btn btn-primary" onclick="generateInvoice('<%= order.id %>')">
+                      Generate
+                    </button>
+                  <% } %>
+                </td>
+                <td>
+                  <a href="/admin/regular-orders/<%= order.id %>" class="btn btn-primary">
+                    View Details
+                  </a>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+
+  <script>
+    function filterTable() {
+      const input = document.getElementById('searchInput');
+      const filter = input.value.toLowerCase();
+      const table = document.getElementById('ordersTable');
+      const rows = table.getElementsByTagName('tr');
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(filter) ? '' : 'none';
+      }
+    }
+
+    async function generateInvoice(orderId) {
+      if (!confirm('Generate invoice for this order?')) return;
+
+      try {
+        const response = await fetch(`/admin/regular-orders/${orderId}/generate-invoice`, {
+          method: 'POST',
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          alert('Invoice generated successfully!');
+          location.reload();
+        } else {
+          alert('Failed to generate invoice: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to generate invoice');
+      }
+    }
+  </script>
+</body>
+</html>

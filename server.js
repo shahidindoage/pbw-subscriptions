@@ -23,6 +23,10 @@ import { getShopifyToken } from "./utils/shopifyTokenManager.js";
 import { buildShipmentRecords, generateShipmentDates, toDateKey } from "./utils/shipmentUtils.js";
 
 
+import shopifyWebhookRoutes from "./routes/shopifyWebhook.routes.js";
+import { generateRegularInvoiceBuffer } from "./utils/generateRegularInvoice.js";
+import { uploadInvoiceToDropbox } from "./utils/dropbox.js";
+
 dotenv.config();
 
 const app = express();
@@ -93,6 +97,7 @@ app.use(
 );
 app.use("/cron", cronRoutes);
 app.use("/api/cron", shopifyCronRoute);
+app.use("/webhooks/shopify", shopifyWebhookRoutes);
 // ===== Razorpay Client =====
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
@@ -1149,7 +1154,7 @@ const previousShipments = await prisma.subscriptionShipment.findMany({
   where: {
     subscription: {
       customerId: dbCustomer.id,
-      status: { in: ["active", "pending"] }, // ✅ include pending too
+       status: "active",
     },
     status: "scheduled",
   },
@@ -1169,7 +1174,7 @@ const newShipmentDates = generateShipmentDates(
 const previousSubs = await prisma.subscription.findMany({
   where: { 
     customerId: dbCustomer.id, 
-    status: { in: ["active", "pending"] }, // ✅ include pending too
+     status: "active",
   },
   select: { totalAmount: true },
 });
@@ -1763,6 +1768,93 @@ app.post("/razorpay-webhook", (req, res) => {
   // Handle payment success/capture here
   res.status(200).json({ ok: true });
 });
+
+
+
+// ===== Regular Orders Admin Routes =====
+
+// List all regular orders
+app.get("/admin/regular-orders", isAdmin, async (req, res) => {
+  try {
+    const orders = await prisma.regularOrder.findMany({
+      orderBy: { orderCreatedAt: "desc" },
+    });
+
+    res.render("admin-regular-orders", { orders });
+  } catch (error) {
+    console.error("Error fetching regular orders:", error);
+    res.status(500).send("Failed to fetch orders");
+  }
+});
+
+// View single regular order details
+app.get("/admin/regular-orders/:id", isAdmin, async (req, res) => {
+  try {
+    const order = await prisma.regularOrder.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!order) {
+      return res.status(404).send("Order not found");
+    }
+
+    res.render("admin-regular-order-detail", { order });
+  } catch (error) {
+    console.error("Error fetching order:", error);
+    res.status(500).send("Failed to fetch order");
+  }
+});
+
+// Generate invoice for regular order (if it doesn't exist)
+app.post("/admin/regular-orders/:id/generate-invoice", isAdmin, async (req, res) => {
+  try {
+    const order = await prisma.regularOrder.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.invoiceUrl) {
+      return res.status(400).json({ error: "Invoice already exists" });
+    }
+
+    // Generate invoice
+    const invoiceNumber = `INV-${order.orderNumber || order.shopifyOrderId}`;
+    const invoiceBuffer = await generateRegularInvoiceBuffer(order, invoiceNumber);
+
+    // Upload to Dropbox
+    const invoiceUrl = await uploadInvoiceToDropbox(
+      invoiceBuffer,
+      `regular-orders/${invoiceNumber}.pdf`
+    );
+
+    // Update order
+    await prisma.regularOrder.update({
+      where: { id: order.id },
+      data: {
+        invoiceUrl,
+        invoiceNumber,
+      },
+    });
+
+    res.json({
+      success: true,
+      invoiceUrl,
+      invoiceNumber,
+    });
+  } catch (error) {
+    console.error("Invoice generation error:", error);
+    res.status(500).json({
+      error: "Failed to generate invoice",
+      details: error.message,
+    });
+  }
+});
+
+
+// ===== END Regular Orders Routes =====
 
 // ===== Health Check =====
 app.get("/", (req, res) => {
