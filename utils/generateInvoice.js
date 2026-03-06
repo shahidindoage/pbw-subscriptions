@@ -6,7 +6,7 @@ export async function generateInvoiceBuffer(
   order,
   subscription,
   customer,
-  invoiceNumber,
+  invoiceNumber, 
   shippingDate,
   prisma   // 👈 ADD THIS PARAM
 ) {

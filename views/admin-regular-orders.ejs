@@ -50,8 +50,8 @@
     }
 
     .sidebar a:last-child {
-      margin-top: 20px;
-      background: #7c2d12;
+      margin-top: 45px;
+      background: #db2525;
       color: #fff;
     }
 
@@ -189,13 +189,11 @@
     }
 
     .btn-success {
-      background: #059669;
+     
       color: white;
     }
 
-    .btn-success:hover {
-      background: #047857;
-    }
+   
 
     .empty-state {
       text-align: center;
@@ -218,18 +216,39 @@
       <h3>Admin Panel</h3>
       <a href="/admin/dashboard?page=customers">Customers</a>
       <a href="/admin/dashboard?page=subscriptions">Subscriptions</a>
-      <a href="/admin/dashboard?page=shopify-orders">Subscription Orders</a>
-      <a href="/admin/dashboard?page=invoices">Subscription Invoices</a>
+      <!-- <a href="/admin/dashboard?page=shopify-orders">Subscription Orders</a> -->
+      <a href="/admin/dashboard?page=invoices">Subscription Orders</a>
       <a href="/admin/regular-orders" class="active">Regular Orders</a>
       <a href="/admin/logout">Logout</a>
     </div>
 
     <!-- Content -->
     <div class="content">
+       <!-- Search -->
+      <div class="search-box">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search by order number, customer name, or email..."
+          onkeyup="filterTable()"
+        />
+      </div>
+
       <h2>Regular Orders (Non-Subscription)</h2>
 
+      <!-- Action Buttons -->
+      <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+        <button onclick="syncOrders()" class="btn btn-primary" id="syncBtn">
+          🔄 Sync from Shopify
+        </button>
+        <button onclick="clearAllOrders()" class="btn" style="background: #dc2626; color: white;" id="clearBtn">
+          🗑️ Clear All Orders
+        </button>
+        <span id="syncStatus" style="margin-left: 10px; color: #6b7280;"></span>
+      </div>
+
       <!-- Stats -->
-      <div class="stats">
+      <!-- <div class="stats">
         <div class="stat-card">
           <h3>Total Orders</h3>
           <p><%= orders.length %></p>
@@ -246,18 +265,9 @@
           <h3>Pending Invoices</h3>
           <p><%= orders.filter(o => !o.invoiceUrl).length %></p>
         </div>
-      </div>
+      </div> -->
 
-      <!-- Search -->
-      <div class="search-box">
-        <input 
-          type="text" 
-          id="searchInput" 
-          placeholder="Search by order number, customer name, or email..."
-          onkeyup="filterTable()"
-        />
-      </div>
-
+     
       <!-- Orders Table -->
       <% if (orders.length === 0) { %>
         <div class="empty-state">
@@ -278,7 +288,7 @@
               <th>Total</th>
               <th>Payment</th>
               <th>Fulfillment</th>
-              <th>Invoice</th>
+              <th>Invoice Management</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -326,9 +336,25 @@
                 </td>
                 <td>
                   <% if (order.invoiceUrl) { %>
-                    <a href="<%= order.invoiceUrl %>" target="_blank" class="btn btn-success">
-                      📄 Download
+                    <a href="<%= order.invoiceUrl.replace("dl=0", "raw=1") %>" target="_blank" class="btn btn-success">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25"
+             fill="#6c757d" viewBox="0 0 24 24"
+             style="cursor:pointer;">
+          <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 
+                   12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 
+                   0 6 3 3 0 0 0 0-6z"/>
+        </svg>
                     </a>
+                    <a href="<%= order.invoiceUrl.replace("dl=0", "dl=1") %>" target="_blank" class="btn btn-success">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25"
+             fill="red" viewBox="0 0 24 24"
+             style="cursor:pointer;">
+          <path d="M12 16l4-5h-3V4h-2v7H8l4 
+                   5zm-7 2v2h14v-2H5z"/>
+        </svg>
+                    </a>
+               
+   
                   <% } else { %>
                     <button class="btn btn-primary" onclick="generateInvoice('<%= order.id %>')">
                       Generate
@@ -359,6 +385,115 @@
         const row = rows[i];
         const text = row.textContent.toLowerCase();
         row.style.display = text.includes(filter) ? '' : 'none';
+      }
+    }
+
+    async function syncOrders() {
+      const btn = document.getElementById('syncBtn');
+      const status = document.getElementById('syncStatus');
+      
+      btn.disabled = true;
+      btn.textContent = '⏳ Syncing...';
+      status.textContent = 'Fetching orders from Shopify...';
+
+      try {
+        const response = await fetch('/admin/sync-shopify-orders/sync-recent', {
+          method: 'POST',
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          status.style.color = '#059669';
+          status.textContent = `✅ Synced! Processed: ${data.processed}, Skipped: ${data.skipped}`;
+          
+          // Reload page after 2 seconds to show new orders
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
+        } else {
+          status.style.color = '#dc2626';
+          status.textContent = '❌ Sync failed: ' + (data.error || 'Unknown error');
+          btn.disabled = false;
+          btn.textContent = '🔄 Sync from Shopify';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        status.style.color = '#dc2626';
+        status.textContent = '❌ Sync failed: ' + error.message;
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync from Shopify';
+      }
+    }
+
+    async function clearAllOrders() {
+      const orderCount = <%= orders.length %>;
+      
+      if (orderCount === 0) {
+        alert('No orders to clear!');
+        return;
+      }
+
+      const confirmed = confirm(
+        `⚠️ WARNING: This will permanently delete all ${orderCount} regular orders and their invoices from the database.\n\n` +
+        'Subscription orders will NOT be affected.\n\n' +
+        'Are you sure you want to continue?'
+      );
+
+      if (!confirmed) return;
+
+      // Double confirmation for safety
+      const doubleConfirm = confirm(
+        `⚠️ FINAL CONFIRMATION\n\n` +
+        `You are about to delete ${orderCount} orders.\n\n` +
+        'This action CANNOT be undone!\n\n' +
+        'Type YES in the next dialog to proceed.'
+      );
+
+      if (!doubleConfirm) return;
+
+      const userInput = prompt('Type "DELETE" (in capital letters) to confirm:');
+      
+      if (userInput !== 'DELETE') {
+        alert('Cancelled - incorrect confirmation text');
+        return;
+      }
+
+      const btn = document.getElementById('clearBtn');
+      const status = document.getElementById('syncStatus');
+      
+      btn.disabled = true;
+      btn.textContent = '⏳ Deleting...';
+      status.textContent = 'Clearing all orders...';
+      status.style.color = '#dc2626';
+
+      try {
+        const response = await fetch('/admin/regular-orders/clear-all', {
+          method: 'POST',
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          status.style.color = '#059669';
+          status.textContent = `✅ Deleted ${data.deletedCount} orders successfully`;
+          
+          // Reload page after 2 seconds
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
+        } else {
+          status.style.color = '#dc2626';
+          status.textContent = '❌ Delete failed: ' + (data.error || 'Unknown error');
+          btn.disabled = false;
+          btn.textContent = '🗑️ Clear All Orders';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        status.style.color = '#dc2626';
+        status.textContent = '❌ Delete failed: ' + error.message;
+        btn.disabled = false;
+        btn.textContent = '🗑️ Clear All Orders';
       }
     }
 

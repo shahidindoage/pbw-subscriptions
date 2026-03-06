@@ -138,34 +138,43 @@ invoiceNumber String?
 //
 model RegularOrder {
   id                String   @id @default(cuid())
-  shopifyOrderId    String   @unique  // Shopify order ID
-  orderNumber       String?  // Order number (e.g., 1234)
-  orderName         String?  // Order name (e.g., #1234)
-  
+  shopifyOrderId    String   @unique
+  orderNumber       String?
+  orderName         String?
+
+  orderType         String   @default("regular") // regular or subscription
+
   customerEmail     String?
   customerName      String?
   customerPhone     String?
-  
-  lineItems         Json     // Array of products
-  totalPrice        String   // Total order price
+
+  lineItems         Json
+
+  totalPrice        String
   subtotalPrice     String?
   totalTax          String?
+
+  // ✅ NEW FIELDS
+  totalDiscount     String?   // Shopify total_discounts
+  shippingFee       String?   // Shipping price
+
   currency          String   @default("INR")
-  
-  financialStatus   String?  // paid, pending, refunded, etc.
-  fulfillmentStatus String?  // fulfilled, unfulfilled, partial
-  
+
+  financialStatus   String?
+  fulfillmentStatus String?
+
   shippingAddress   Json?
   billingAddress    Json?
-  
-  invoiceUrl        String?  // Dropbox URL
-  invoiceNumber     String?  // e.g., INV-1234
-  
-  orderCreatedAt    DateTime // When order was created in Shopify
+
+  invoiceUrl        String?
+  invoiceNumber     String?
+
+  orderCreatedAt    DateTime
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  
+
   @@index([shopifyOrderId])
+  @@index([orderType])
   @@index([customerEmail])
   @@index([orderCreatedAt])
 }

@@ -27,6 +27,8 @@ export async function generateRegularInvoiceBuffer(order, invoiceNumber) {
       : JSON.parse(order.lineItems);
 
     const totalPrice = parseFloat(order.totalPrice || 0);
+    const discount = parseFloat(order.totalDiscount || 0);
+    const shippingfee = parseFloat(order.shippingFee || 0);
     const subtotalPrice = parseFloat(order.subtotalPrice || totalPrice);
     const totalTax = parseFloat(order.totalTax || 0);
 
@@ -69,48 +71,220 @@ export async function generateRegularInvoiceBuffer(order, invoiceNumber) {
     const companyContact = "+91 9821024666";
     const companyEmail = "info@pbwfoods.com";
 
-    /* ---------------- HEADER ---------------- */
-    doc.fontSize(20).font("Helvetica-Bold").text("TAX INVOICE", startX, cursorY, {
-      width: pageWidth - 40,
-      align: "center",
+    
+      /* ---------------- PAGE BORDER ---------------- */
+
+      doc.rect(10, 10, pageWidth - 20, pageHeight - 20).stroke();
+
+      /* ---------------- HEADER ---------------- */
+
+      doc.font("Helvetica-Bold").fontSize(22)
+        .text("TAX INVOICE", startX, cursorY);
+
+      doc.fontSize(9).font("Helvetica-Bold")
+        .text("GSTIN: 06AAOCP2140F1ZM", startX, cursorY + 30)
+        .text("CIN: U10797DL2023PTC422253", startX, cursorY + 45);
+
+      doc.font("Helvetica-Bold")
+        .text("ORIGINAL", pageWidth - 120, cursorY + 2, { align: "right" })
+        .font("Helvetica-Bold")
+        .text("FSSAI LIC NO.: 13324999000116", pageWidth - 180, cursorY + 15, { align: "right" });
+
+      cursorY += 80;
+
+      doc.font("Helvetica-Bold").fontSize(12)
+        .text("PBW Foods Private Limited", 0, cursorY, { align: "center" });
+
+      cursorY += 15;
+
+      doc.font("Helvetica").fontSize(8)
+        .text(
+          "PBW Foods Private Limited, Bldg #5, Epitome, Ground Floor, DLF Cyber City Rd, Phase 3, Sector 24, Gurugram - 122002, Haryana, India",
+          0,
+          cursorY,
+          { align: "center" }
+        );
+
+      cursorY += 20;
+
+      const footerColW = (pageWidth - 40) / 3;
+let footerX = startX;
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+
+/* EMAIL */
+doc.text(
+  "email@pbwfoods.com ",
+  footerX,
+  cursorY,
+  { width: footerColW, align: "center" }
+)
+
+/* WEBSITE */
+.text(
+  "www.pbwfoods.com",
+  footerX + footerColW,
+  cursorY,
+  { width: footerColW, align: "center" }
+)
+
+/* PHONE */
+.text(
+  "080-47360729",
+  footerX + footerColW * 2,
+  cursorY,
+  { width: footerColW, align: "center" }
+);
+
+cursorY += 20;
+
+      /* ---------------- TABLE FUNCTION ---------------- */
+
+   function cell(
+  x,
+  y,
+  w,
+  h,
+  text = "",
+  align = "left",
+  bold = false,
+  borders = { top: true, right: true, bottom: true, left: true },
+  background = null,          // NEW
+  textColor = "#000000"       // NEW
+) {
+  doc.lineWidth(1);
+
+  /* -------- BACKGROUND -------- */
+  if (background) {
+    doc.save();
+    doc.rect(x, y, w, h).fill(background);
+    doc.restore();
+  }
+
+  /* -------- BORDERS -------- */
+  if (borders.top) {
+    doc.moveTo(x, y).lineTo(x + w, y).stroke();
+  }
+
+  if (borders.right) {
+    doc.moveTo(x + w, y).lineTo(x + w, y + h).stroke();
+  }
+
+  if (borders.bottom) {
+    doc.moveTo(x, y + h).lineTo(x + w, y + h).stroke();
+  }
+
+  if (borders.left) {
+    doc.moveTo(x, y).lineTo(x, y + h).stroke();
+  }
+
+  /* -------- TEXT -------- */
+  doc
+    .fillColor(textColor)
+    .font(bold ? "Helvetica-Bold" : "Helvetica")
+    .fontSize(9)
+    .text(text, x + 5, y + 8, {
+      width: w - 10,
+      align: align,
     });
-    cursorY += 30;
 
-    // Company details
-    doc.fontSize(14).font("Helvetica-Bold").text(companyName, startX, cursorY);
-    cursorY += 18;
-    doc.fontSize(9).font("Helvetica").text(companyAddress, startX, cursorY);
-    cursorY += 28;
-    doc.text(`GSTIN: ${companyGSTIN}`, startX, cursorY);
-    cursorY += 12;
-    doc.text(`Mobile: ${companyContact} | Email: ${companyEmail}`, startX, cursorY);
-    cursorY += 20;
+  // Reset text color
+  doc.fillColor("#000000");
+}
 
-    // Invoice details box
-    const invoiceBoxY = cursorY;
-    doc.rect(startX, invoiceBoxY, pageWidth - 40, 60).stroke();
+      /* ---------------- 3x3 TABLE ---------------- */
 
-    doc.fontSize(9).font("Helvetica-Bold")
-      .text("Invoice No:", startX + 10, invoiceBoxY + 10)
-      .font("Helvetica")
-      .text(invoiceNumber, startX + 80, invoiceBoxY + 10);
+      const colW = (pageWidth - 40) / 3;
+      const rowH = 28;
 
-    doc.font("Helvetica-Bold")
-      .text("Order No:", startX + 250, invoiceBoxY + 10)
-      .font("Helvetica")
-      .text(order.orderName || order.orderNumber || "N/A", startX + 310, invoiceBoxY + 10);
+      cell(startX, cursorY, colW, rowH, "");
 
-    doc.font("Helvetica-Bold")
-      .text("Invoice Date:", startX + 10, invoiceBoxY + 25)
-      .font("Helvetica")
-      .text(new Date().toLocaleDateString("en-IN"), startX + 80, invoiceBoxY + 25);
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Invoice No: ", startX + 5, cursorY + 8, { continued: true });
 
-    doc.font("Helvetica-Bold")
-      .text("Order Date:", startX + 250, invoiceBoxY + 25)
-      .font("Helvetica")
-      .text(new Date(order.orderCreatedAt).toLocaleDateString("en-IN"), startX + 310, invoiceBoxY + 25);
+doc.font("Helvetica")
+   .text(invoiceNumber, {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY, colW, rowH, "");
 
-    cursorY = invoiceBoxY + 70;
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Order No: ", startX + colW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(order.orderName || order.orderNumber || "N/A", {
+     width: colW - 10
+   });
+      cell(startX + colW * 2, cursorY, colW, rowH);
+
+      cell(startX, cursorY + rowH, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Invoice Date: ", startX + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date().toLocaleDateString(), {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY + rowH, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Order Date: ", startX + colW + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date().toLocaleDateString(), {
+     width: colW - 10
+   });
+      cell(startX + colW * 2, cursorY + rowH, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Supply: ", startX + colW * 2 + 5, cursorY + rowH + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(new Date().toLocaleDateString(), {
+     width: colW - 10
+   });
+
+      // Draw empty cell
+cell(startX, cursorY + rowH * 2, colW, rowH, "");
+
+// Bold label + normal value
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("Haryana", {
+     width: colW - 10
+   });
+      cell(startX + colW, cursorY + rowH * 2, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Code: ", startX + colW + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("6", {
+     width: colW - 10
+   });
+     cell(startX + colW * 2, cursorY + rowH * 2, colW, rowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Place: ", startX + colW * 2 + 5, cursorY + rowH * 2 + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("Gurugram" || "-", {
+     width: colW - 10
+   });
+
+      cursorY += rowH * 3 + 20;
 
     /* ---------------- CUSTOMER DETAILS ---------------- */
     const shipping = typeof order.shippingAddress === 'string' 
@@ -121,108 +295,254 @@ export async function generateRegularInvoiceBuffer(order, invoiceNumber) {
       ? JSON.parse(order.billingAddress)
       : order.billingAddress || {};
 
-    doc.fontSize(10).font("Helvetica-Bold").text("Bill To:", startX, cursorY);
-    cursorY += 15;
+   /* ---------------- BILL / SHIP ---------------- */
 
-    const customerName = order.customerName || 
-      `${shipping.first_name || ''} ${shipping.last_name || ''}`.trim() || 
-      "Customer";
-    
-    doc.fontSize(9).font("Helvetica").text(customerName, startX, cursorY);
-    cursorY += 12;
+      const totalW = pageWidth - 40;
 
-    if (shipping.address1) {
-      const address = [
-        shipping.address1,
-        shipping.address2,
-        shipping.city,
-        shipping.province,
-        shipping.zip,
-        shipping.country
-      ].filter(Boolean).join(", ");
-      
-      doc.text(address, startX, cursorY, { width: 250 });
-      cursorY += 24;
-    }
+const leftW = totalW * 0.45;   // BILL TO
+const rightW = totalW * 0.55;  // SHIP TO (more space)
 
-    if (order.customerPhone || shipping.phone) {
-      doc.text(`Phone: ${order.customerPhone || shipping.phone}`, startX, cursorY);
-      cursorY += 12;
-    }
+cell(startX, cursorY, leftW, 25, "BILL TO PARTY", "center", true, undefined, "#f0f0f0");
+cell(startX + leftW, cursorY, rightW, 25, "SHIP TO PARTY / DELIVERY ADDRESS", "center", true, undefined, "#f0f0f0");
 
-    if (order.customerEmail) {
-      doc.text(`Email: ${order.customerEmail}`, startX, cursorY);
-      cursorY += 12;
-    }
+cursorY += 25;
 
-    cursorY += 10;
+const addressText =
+  `${shipping?.address1 || ""}, ${shipping?.address2 || ""},
+${shipping?.city || ""}, ${shipping?.province || ""},
+${shipping?.zip || ""}`;
 
-    /* ---------------- ITEMS TABLE ---------------- */
-    const tableTop = cursorY;
-    const colWidths = {
-      sno: 30,
-      description: 220,
-      hsn: 70,
-      qty: 50,
-      rate: 70,
-      amount: 75,
-    };
+const nameRowH = 25;
+const addressRowH = 60; // increased height
 
-    // Table header
-    doc.rect(startX, tableTop, pageWidth - 40, 25).fillAndStroke("#5e8046", "#000");
-    
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#fff");
-    let colX = startX + 5;
-    
-    doc.text("S.No", colX, tableTop + 8, { width: colWidths.sno, align: "left" });
-    colX += colWidths.sno;
-    doc.text("Description", colX, tableTop + 8, { width: colWidths.description, align: "left" });
-    colX += colWidths.description;
-    doc.text("HSN", colX, tableTop + 8, { width: colWidths.hsn, align: "left" });
-    colX += colWidths.hsn;
-    doc.text("Qty", colX, tableTop + 8, { width: colWidths.qty, align: "center" });
-    colX += colWidths.qty;
-    doc.text("Rate", colX, tableTop + 8, { width: colWidths.rate, align: "right" });
-    colX += colWidths.rate;
-    doc.text("Amount", colX, tableTop + 8, { width: colWidths.amount, align: "right" });
+/* NAME ROW */
+cell(startX, cursorY, leftW, nameRowH, shipping.name, "left", true);
+cell(startX + leftW, cursorY, rightW, nameRowH, shipping.name, "left", true);
+cursorY += nameRowH;
 
-    cursorY = tableTop + 25;
+/* ADDRESS ROW */
+cell(startX, cursorY, leftW, addressRowH, addressText);
+cell(startX + leftW, cursorY, rightW, addressRowH, addressText);
 
-    // Table rows
-    doc.fillColor("#000");
-    lineItems.forEach((item, index) => {
-      const rowHeight = 30;
-      doc.rect(startX, cursorY, pageWidth - 40, rowHeight).stroke();
+cursorY +=  addressRowH;
 
-      colX = startX + 5;
-      doc.fontSize(9).font("Helvetica");
-      
-      doc.text((index + 1).toString(), colX, cursorY + 10, { width: colWidths.sno, align: "left" });
-      colX += colWidths.sno;
-      
-      doc.text(item.title || item.name || "Product", colX, cursorY + 10, { 
-        width: colWidths.description, 
-        align: "left",
-        ellipsis: true 
-      });
-      colX += colWidths.description;
-      
-      doc.text(item.sku || "N/A", colX, cursorY + 10, { width: colWidths.hsn, align: "left" });
-      colX += colWidths.hsn;
-      
-      doc.text(item.quantity?.toString() || "1", colX, cursorY + 10, { width: colWidths.qty, align: "center" });
-      colX += colWidths.qty;
-      
-      const rate = parseFloat(item.price || 0);
-      doc.text(`₹${rate.toFixed(2)}`, colX, cursorY + 10, { width: colWidths.rate, align: "right" });
-      colX += colWidths.rate;
-      
-      const amount = rate * (item.quantity || 1);
-      doc.text(`₹${amount.toFixed(2)}`, colX, cursorY + 10, { width: colWidths.amount, align: "right" });
+const phoneRowH = 20;
 
-      cursorY += rowHeight;
-    });
+// Draw empty cell
+cell(startX, cursorY, leftW, phoneRowH, "");
 
+// Bold label
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Phone: ", startX + 5, cursorY + 8, { continued: true });
+
+// Normal value
+doc.font("Helvetica")
+   .text(shipping?.phone || "-", {
+     width: leftW - 10
+   });
+
+cell(startX + leftW, cursorY, rightW, phoneRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Phone: ", startX + leftW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(shipping?.phone || "-", {
+     width: rightW - 10
+   });
+
+cursorY += phoneRowH;
+
+const infoRowH = 20;
+
+// Split left column
+const leftHalf1 = leftW / 2;
+const leftHalf2 = leftW / 2;
+
+// Split right column
+const rightHalf1 = rightW / 2;
+const rightHalf2 = rightW / 2;
+
+/* LEFT COLUMN PARTITIONS */
+// Draw empty cell first
+cell(startX, cursorY, leftHalf1, infoRowH, "");
+
+// Bold Label
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + 5, cursorY + 8, { continued: true });
+
+// Normal Value
+doc.font("Helvetica")
+   .text(shipping?.province || "-", {
+     width: leftHalf1 - 10
+   });
+
+cell(startX + leftHalf1, cursorY, leftHalf2, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Country: ", startX + leftHalf1 + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("India", {
+     width: leftHalf2 - 10
+   });
+
+/* RIGHT COLUMN PARTITIONS */
+cell(startX + leftW, cursorY, rightHalf1, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("State: ", startX + leftW + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text(shipping?.province || "-", {
+     width: rightHalf1 - 10
+   });
+
+cell(startX + leftW + rightHalf1, cursorY, rightHalf2, infoRowH, "");
+
+doc.font("Helvetica-Bold")
+   .fontSize(9)
+   .text("Country: ", startX + leftW + rightHalf1 + 5, cursorY + 8, { continued: true });
+
+doc.font("Helvetica")
+   .text("India", {
+     width: rightHalf2 - 10
+   });
+
+cursorY += infoRowH + 20;
+
+
+    /* ---------------- PRODUCT TABLE ---------------- */
+
+const cols = [30, 140, 60, 40, 60, 60, 40, 60, 60];
+const headers = [
+  "#",
+  "ITEM - SKU",
+  "HSN",
+  "QTY",
+  "RATE",
+  "TAXABLE",
+  "GST%",
+  "IGST",
+  "TOTAL"
+];
+
+/* HEADER */
+let x = startX;
+
+headers.forEach((h, i) => {
+  cell(x, cursorY, cols[i], 25, h, "center", true, undefined, "#f0f0f0");
+  x += cols[i];
+});
+
+cursorY += 25;
+
+
+/* PRODUCT ROWS */
+let totalQuantity = 0;
+let totalPricefor = 0;
+
+lineItems.forEach((item, index) => {
+
+  x = startX;
+
+  const quantity = item.quantity || 1;
+  const rate = parseFloat(item.price || 0);
+
+  const gstPercent = 5;
+  const total = rate * quantity;
+  const gstValue = (total * gstPercent) / 100;
+  const taxable = total - gstValue;
+
+  /* ADD THESE */
+totalQuantity += quantity;
+totalPricefor += total;
+
+  const row = [
+    (index + 1).toString(),
+    `${item.title || item.name || "Product"}`,
+    item.sku || "-",           // HSN
+    quantity.toString(),
+    rate.toFixed(2),
+    taxable.toFixed(2),
+    gstPercent.toString(),
+    gstValue.toFixed(2),
+    total.toFixed(2)
+  ];
+
+  row.forEach((d, i) => {
+    cell(x, cursorY, cols[i], 30, d, "center");
+    x += cols[i];
+  });
+
+  cursorY += 30;
+
+});
+
+
+/* EMPTY ROWS FOR DESIGN */
+for (let r = 0; r < 2; r++) {
+
+  let emptyX = startX;
+
+  cols.forEach((colWidth) => {
+    cell(emptyX, cursorY, colWidth, 20, "", "center");
+    emptyX += colWidth;
+  });
+
+  cursorY += 20;
+
+}
+// ✅ TOTAL ROW
+let totalRowY = cursorY;
+let totalX = startX;
+
+// 1️⃣ Merge first two columns
+const mergedWidth = cols[0] + cols[1];
+cell(totalX, totalRowY, mergedWidth, 20, "TOTAL", "center", true, undefined, "#f0f0f0");
+totalX += mergedWidth;
+
+// 2️⃣ HSN column
+cell(totalX, totalRowY, cols[2], 20, "", "center");
+totalX += cols[2];
+
+// 3️⃣ TOTAL QUANTITY
+cell(totalX, totalRowY, cols[3], 20, totalQuantity.toString(), "center", true);
+totalX += cols[3];
+
+// 4️⃣ RATE column
+cell(totalX, totalRowY, cols[4], 20, "", "center");
+totalX += cols[4];
+
+// 5️⃣ TAXABLE
+cell(totalX, totalRowY, cols[5], 20, "", "center");
+totalX += cols[5];
+
+// 6️⃣ GST %
+cell(totalX, totalRowY, cols[6], 20, "", "center");
+totalX += cols[6];
+
+// 7️⃣ IGST
+cell(totalX, totalRowY, cols[7], 20, "", "center");
+totalX += cols[7];
+
+// 8️⃣ FINAL TOTAL
+cell(
+  totalX,
+  totalRowY,
+  cols[8],
+  20,
+  totalPricefor.toFixed(2),
+  "center",
+  true
+);
+
+cursorY += 20;
     /* ---------------- TOTALS ---------------- */
     cursorY += 5;
 
@@ -231,26 +551,26 @@ export async function generateRegularInvoiceBuffer(order, invoiceNumber) {
 
     // Subtotal
     doc.rect(totalBoxX, cursorY, 200, rowHeight).stroke();
-    doc.fontSize(9).font("Helvetica-Bold").text("Subtotal:", totalBoxX + 10, cursorY + 6);
-    doc.text(`₹${subtotalPrice.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
+    doc.fontSize(9).font("Helvetica-Bold").text("Total:", totalBoxX + 10, cursorY + 6);
+    doc.text(`Rs. ${totalPricefor.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
     cursorY += rowHeight;
 
     // CGST
     doc.rect(totalBoxX, cursorY, 200, rowHeight).stroke();
-    doc.font("Helvetica").text("CGST (9%):", totalBoxX + 10, cursorY + 6);
-    doc.text(`₹${cgst.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
+    doc.font("Helvetica").text("Discount:", totalBoxX + 10, cursorY + 6);
+    doc.text(`Rs. ${discount.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
     cursorY += rowHeight;
 
     // SGST
     doc.rect(totalBoxX, cursorY, 200, rowHeight).stroke();
-    doc.text("SGST (9%):", totalBoxX + 10, cursorY + 6);
-    doc.text(`₹${sgst.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
+    doc.text("Shipping Fee:", totalBoxX + 10, cursorY + 6);
+    doc.text(`Rs. ${shippingfee.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
     cursorY += rowHeight;
 
     // Grand Total
     doc.rect(totalBoxX, cursorY, 200, rowHeight).fillAndStroke("#5e8046", "#000");
     doc.fillColor("#fff").font("Helvetica-Bold").text("Grand Total:", totalBoxX + 10, cursorY + 6);
-    doc.text(`₹${totalPrice.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
+    doc.text(`Rs. ${totalPrice.toFixed(2)}`, totalBoxX + 10, cursorY + 6, { width: 180, align: "right" });
     cursorY += rowHeight + 10;
 
     /* ---------------- AMOUNT IN WORDS ---------------- */
@@ -266,25 +586,25 @@ export async function generateRegularInvoiceBuffer(order, invoiceNumber) {
     doc.font("Helvetica").fontSize(7);
     doc.text("1. Goods once sold will not be taken back.", startX, cursorY);
     cursorY += 10;
-    doc.text("2. Interest @ 18% p.a. will be charged if the payment is not made within the stipulated time.", startX, cursorY);
+    doc.text("2. Interest @ 5% p.a. will be charged if the payment is not made within the stipulated time.", startX, cursorY);
     cursorY += 10;
     doc.text("3. Subject to Delhi Jurisdiction only.", startX, cursorY);
     cursorY += 30;
 
     /* ---------------- SIGNATURE ---------------- */
-    doc.fontSize(9).font("Helvetica-Bold");
-    doc.text("For " + companyName, pageWidth - 200, cursorY, { align: "left" });
-    cursorY += 40;
-    doc.text("Authorized Signatory", pageWidth - 200, cursorY, { align: "left" });
+    // doc.fontSize(9).font("Helvetica-Bold");
+    // doc.text("For " + companyName, pageWidth - 200, cursorY, { align: "left" });
+    // cursorY += 40;
+    // doc.text("Authorized Signatory", pageWidth - 200, cursorY, { align: "left" });
 
     /* ---------------- FOOTER ---------------- */
-    doc.fontSize(7).font("Helvetica").fillColor("#666");
-    doc.text(
-      "This is a computer-generated invoice and does not require a signature.",
-      startX,
-      pageHeight - 40,
-      { width: pageWidth - 40, align: "center" }
-    );
+    // doc.fontSize(7).font("Helvetica").fillColor("#666");
+    // doc.text(
+    //   "This is a computer-generated invoice and does not require a signature.",
+    //   startX,
+    //   pageHeight - 40,
+    //   { width: pageWidth - 40, align: "center" }
+    // );
 
     doc.end();
 

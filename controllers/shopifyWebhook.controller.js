@@ -7,10 +7,11 @@ import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
  * Verify Shopify webhook signature
  */
 function verifyShopifyWebhook(body, hmacHeader) {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
+  // For Shopify apps, the secret is the API secret key, NOT a webhook-specific secret
+  const secret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_WEBHOOK_SECRET;
   
   if (!secret) {
-    console.error("⚠️ SHOPIFY_WEBHOOK_SECRET not set in .env");
+    console.error("⚠️ SHOPIFY_API_SECRET or SHOPIFY_WEBHOOK_SECRET not set in .env");
     return false;
   }
 

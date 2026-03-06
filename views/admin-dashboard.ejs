@@ -10,7 +10,20 @@
     background: #f3f4f6;
     color: #111827;
   }
+ .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
 
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-refunded { background: #fee2e2; color: #991b1b; }
+    .badge-fulfilled { background: #dbeafe; color: #1e40af; }
+    .badge-unfulfilled { background: #f3f4f6; color: #4b5563; }
   .container {
     display: flex;
     height: 100vh;
@@ -495,16 +508,18 @@ button:disabled {
       Subscriptions
     </a>
 
-<a href="/admin/dashboard?page=shopify-orders"
+<!-- <a href="/admin/dashboard?page=shopify-orders"
    class="<%= page === 'shopify-orders' ? 'active' : '' %>">
-  Shopify Orders
-</a>
+ Subscription Orders 
+</a> -->
 
 <a href="/admin/dashboard?page=invoices"
    class="<%= page === 'invoices' ? 'active' : '' %>">
-  Invoices
+  Subscription Orders
 </a>
-
+<a href="/admin/regular-orders" class="<%= page === 'regular-orders' ? 'active' : '' %>">
+      Regular Orders
+    </a>
 
     <br>
     <a href="/admin/logout">Logout</a>
@@ -788,18 +803,24 @@ button:disabled {
 <% } %>
 
 <% if (page === "invoices") { %>
-  <h2>Invoices</h2>
+  <h2>Subscription Orders</h2>
 <div class="invoice-actions-card">
 
   <div class="action-row">
-
-    <!-- Bulk Download -->
+<div style="display: flex;gap: 20px;">
+ <!-- Bulk Download -->
+  <button id="syncFulfillment" style="background-color: #2563eb;color: white;">
+Sync Fulfilled Orders
+</button>
     <button id="bulkDownloadBtn" class="action-btn danger">
       <span id="btnText">Download Selected</span>
       <span id="spinner" class="spinner">⏳</span>
     </button>
-<div class="last-group">
-  <!-- Date Range -->
+    
+</div>
+   
+<!-- <div class="last-group">
+ 
     <div class="range-group">
       <select id="exportRange" class="range-select">
         <option value="7">Last 7 Days</option>
@@ -815,7 +836,7 @@ button:disabled {
 
     </div>
 
-    <!-- Email Export -->
+  
     <div class="email-group">
       <input type="email" id="exportEmail" 
              placeholder="Filter by email (optional)" 
@@ -828,7 +849,7 @@ button:disabled {
     </div>
 
 
-</div>
+</div> -->
   
   </div>
 
@@ -836,6 +857,7 @@ button:disabled {
 
 
   <table id="adminTable">
+    
     <tr>
       <th>
   <input type="checkbox" id="selectAll">
@@ -876,7 +898,13 @@ button:disabled {
         <td><%= o.subscription.customer.email %></td>
 <td><strong><%= o.shippingDate.toDateString() %></strong></td>
         <!-- Status -->
-        <td><strong><%= o.status %></strong></td>
+         <td>
+                  <% if (o.status === 'fulfilled') { %>
+                    <span class="badge badge-fulfilled">Fulfilled</span>
+                  <% } else { %>
+                    <span class="badge badge-unfulfilled"><%= o.status || 'Unfulfilled' %></span>
+                  <% } %>
+                </td>
 
         <!-- Invoice Download -->
   <td style="text-align: center;">
@@ -934,6 +962,41 @@ button:disabled {
 
   </div>
 </div>
+
+<script>
+  document
+.getElementById("syncFulfillment")
+.addEventListener("click", async () => {
+
+  const btn = document.getElementById("syncFulfillment");
+
+  btn.innerText = "Checking...";
+  btn.disabled = true;
+
+  try {
+
+    const res = await fetch("/admin/sync-subscription-fulfillment", {
+      method: "POST"
+    });
+
+    const data = await res.json();
+
+    alert(`Updated ${data.updated} fulfilled orders`);
+
+    location.reload();
+
+  } catch (error) {
+
+    alert("Sync failed");
+
+  }
+
+  btn.innerText = "Sync Fulfilled Orders";
+  btn.disabled = false;
+
+});
+</script>
+
 
 <script>
 document.getElementById("bulkDownloadBtn").addEventListener("click", async () => {

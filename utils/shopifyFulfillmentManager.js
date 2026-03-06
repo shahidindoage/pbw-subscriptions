@@ -18,6 +18,8 @@ export async function fulfillShopifyOrder(shopifyOrderId) {
     );
 
     const order = orderRes.data.order;
+    console.log("📦 FULL ORDER DATA:");
+console.log(JSON.stringify(order, null, 2));
 
     if (!order) throw new Error("Order not found");
 

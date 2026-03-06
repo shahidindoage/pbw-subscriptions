@@ -26,6 +26,9 @@ import { buildShipmentRecords, generateShipmentDates, toDateKey } from "./utils/
 import shopifyWebhookRoutes from "./routes/shopifyWebhook.routes.js";
 import { generateRegularInvoiceBuffer } from "./utils/generateRegularInvoice.js";
 import { uploadInvoiceToDropbox } from "./utils/dropbox.js";
+import syncShopifyOrdersRoutes from "./routes/syncShopifyOrders.routes.js";  // ← ADD THIS
+import { syncSubscriptionFulfillment } from "./utils/syncSubscriptionFulfillment.js";
+// import { startShopifyOrderSync } from "./cron/shopifyOrderSync.js";           // ← ADD THIS
 
 dotenv.config();
 
@@ -97,7 +100,7 @@ app.use(
 );
 app.use("/cron", cronRoutes);
 app.use("/api/cron", shopifyCronRoute);
-app.use("/webhooks/shopify", shopifyWebhookRoutes);
+app.use("/admin/sync-shopify-orders", syncShopifyOrdersRoutes);
 // ===== Razorpay Client =====
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
@@ -192,20 +195,21 @@ app.get("/admin/dashboard", isAdmin, async (req, res) => {
   });
     // ✅ Only orders that have invoice
   const invoices = await prisma.shopifyOrder.findMany({
-    where: {
-      invoiceUrl: {
-        not: null,
+  where: {
+    invoiceUrl: {
+      not: null,
+    },
+    status: "fulfilled", // ✅ only fulfilled orders
+  },
+  include: {
+    subscription: {
+      include: {
+        customer: true,
       },
     },
-    include: {
-      subscription: {
-        include: {
-          customer: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  },
+  orderBy: { createdAt: "desc" },
+});
 
   res.render("admin-dashboard", {
     page: req.query.page || "customers",
@@ -305,7 +309,25 @@ app.get("/admin/subscription/:id/orders", isAdmin, async (req, res) => {
     }))
   );
 });
+app.post("/admin/sync-subscription-fulfillment", async (req, res) => {
 
+  try {
+
+    const result = await syncSubscriptionFulfillment();
+
+    res.json(result);
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Sync failed"
+    });
+
+  }
+
+});
 
 app.get("/admin/subscriptions", isAdmin, async (req, res) => {
   const subscriptions = await prisma.subscription.findMany({
@@ -1773,6 +1795,21 @@ app.post("/razorpay-webhook", (req, res) => {
 
 // ===== Regular Orders Admin Routes =====
 
+
+// ===== Test Webhook Setup =====
+
+// ===== Health Check =====
+app.get("/", (req, res) => {
+  res.send("Subscription backend running ✅");
+});
+app.get("/test/webhook-config", (req, res) => {
+  res.json({
+    webhookSecretConfigured: !!process.env.SHOPIFY_WEBHOOK_SECRET,
+    webhookRoute: "/webhooks/shopify/orders/create",
+    fullURL: `${req.protocol}://${req.get('host')}/webhooks/shopify/orders/create`,
+    regularOrderModel: typeof prisma.regularOrder !== 'undefined',
+  });
+});
 // List all regular orders
 app.get("/admin/regular-orders", isAdmin, async (req, res) => {
   try {
@@ -1852,15 +1889,44 @@ app.post("/admin/regular-orders/:id/generate-invoice", isAdmin, async (req, res)
     });
   }
 });
+// Clear all regular orders (with safety checks)
+app.post("/admin/regular-orders/clear-all", isAdmin, async (req, res) => {
+  try {
+    console.log("⚠️  Admin requested to clear all regular orders");
 
+    // Count orders before deletion
+    const count = await prisma.regularOrder.count();
 
-// ===== END Regular Orders Routes =====
+    if (count === 0) {
+      return res.json({
+        success: true,
+        deletedCount: 0,
+        message: "No orders to delete"
+      });
+    }
 
-// ===== Health Check =====
-app.get("/", (req, res) => {
-  res.send("Subscription backend running ✅");
+    // Delete all regular orders
+    const result = await prisma.regularOrder.deleteMany({});
+
+    console.log(`✅ Deleted ${result.count} regular orders`);
+
+    res.json({
+      success: true,
+      deletedCount: result.count,
+      message: `Successfully deleted ${result.count} orders`
+    });
+
+  } catch (error) {
+    console.error("Error clearing orders:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to clear orders",
+      details: error.message
+    });
+  }
 });
 
+// ===== END Regular Orders Routes =====
 // ===== Start Server =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
