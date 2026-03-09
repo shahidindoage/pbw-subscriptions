@@ -1156,6 +1156,10 @@ app.post("/create-subscription", async (req, res) => {
 
       if (todayDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) continue;
 
+      if (todayDay === dayMap["Sat"] && now >= cutoff && candidateDay === dayMap["Mon"]) {
+  continue;
+}
+
       if (candidateDay === todayDay && now >= cutoff) continue;
 
       nextShippingDate = shippingUTC;
@@ -1477,6 +1481,12 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
       if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
         continue;
       }
+
+
+      // ✅ NEW: Skip Monday if start date is Saturday AFTER 9 AM
+  if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"]) {
+    continue;
+  }
 
       if (candidateDay === startDay && startDate >= cutoff) {
         continue;
