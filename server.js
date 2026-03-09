@@ -1468,33 +1468,55 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
 
     let nextShippingDate = null;
 
+
     for (let i = 0; i <= 14; i++) {
-      const candidate = addDays(startDate, i);
-      const candidateDay = candidate.getDay();
+  const candidate = addDays(startDate, i);
+  const candidateDay = candidate.getDay();
 
-      if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) continue;
+  console.log(`\n🔄 Loop i=${i}, candidate=${candidate.toISOString()}, day=${candidateDay}`);
 
-      const shippingUTC = ist9AMToUTC(candidate);
-
-      if (shippingUTC < minShippingTime) continue;
-
-      if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
-        continue;
-      }
-
-
-      // ✅ NEW: Skip Monday if start date is Saturday AFTER 9 AM
-  if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"]) {
+  if (!normalizedDeliveryDays.some(d => dayMap[d] === candidateDay)) {
+    console.log(`  ⏭️ Skip - not in delivery days`);
     continue;
   }
 
-      if (candidateDay === startDay && startDate >= cutoff) {
-        continue;
-      }
+  const shippingUTC = ist9AMToUTC(candidate);
+  console.log(`  ✅ In delivery days, shippingUTC=${shippingUTC.toISOString()}`);
 
-      nextShippingDate = shippingUTC;
-      break;
-    }
+  if (shippingUTC < minShippingTime) {
+    console.log(`  ⏭️ Skip - before minShippingTime`);
+    continue;
+  }
+
+  console.log(`  ✅ Passed minShippingTime check`);
+
+  if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
+    console.log(`  ⏭️ Skip - Sunday→Monday rule`);
+    continue;
+  }
+
+  console.log(`  ✅ Passed Sunday→Monday check`);
+  console.log(`  🔍 Saturday check: startDay=${startDay}, cutoff check=${startDate >= cutoff}, isMonday=${candidateDay === dayMap["Mon"]}`);
+
+  // ✅ Skip Monday if start date is Saturday AFTER 9 AM
+  if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"]) {
+    console.log(`  ⏭️ SKIPPING MONDAY - Saturday after 9 AM!`);
+    continue;
+  }
+
+  console.log(`  ✅ Passed Saturday→Monday check`);
+
+  if (candidateDay === startDay && startDate >= cutoff) {
+    console.log(`  ⏭️ Skip - same day after cutoff`);
+    continue;
+  }
+
+  console.log(`  🎯 SELECTED as nextShippingDate!`);
+  nextShippingDate = shippingUTC;
+  break;
+}
+
+console.log(`\n✅ Final nextShippingDate: ${nextShippingDate?.toISOString()}`);
 
     if (!nextShippingDate) {
       return res.status(400).json({ error: "No valid next shipping date found" });
