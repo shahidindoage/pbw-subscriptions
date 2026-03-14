@@ -1492,19 +1492,42 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
 
   console.log(`  ✅ Passed minShippingTime check`);
 
-  if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
-    console.log(`  ⏭️ Skip - Sunday→Monday rule`);
-    continue;
-  }
+  // if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"]) {
+  //   console.log(`  ⏭️ Skip - Sunday→Monday rule`);
+  //   continue;
+  // }
 
-  console.log(`  ✅ Passed Sunday→Monday check`);
-  console.log(`  🔍 Saturday check: startDay=${startDay}, cutoff check=${startDate >= cutoff}, isMonday=${candidateDay === dayMap["Mon"]}`);
+  // console.log(`  ✅ Passed Sunday→Monday check`);
+  // console.log(`  🔍 Saturday check: startDay=${startDay}, cutoff check=${startDate >= cutoff}, isMonday=${candidateDay === dayMap["Mon"]}`);
 
-  // ✅ Skip Monday if start date is Saturday AFTER 9 AM
-  if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"]) {
-    console.log(`  ⏭️ SKIPPING MONDAY - Saturday after 9 AM!`);
-    continue;
-  }
+  // // ✅ Skip Monday if start date is Saturday AFTER 9 AM
+  // if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"]) {
+  //   console.log(`  ⏭️ SKIPPING MONDAY - Saturday after 9 AM!`);
+  //   continue;
+  // }
+
+
+
+      // ✅ Skip FIRST Monday if start date is Sunday
+if (startDay === dayMap["Sun"] && candidateDay === dayMap["Mon"] && i <= 2) {
+  console.log(`  ⏭️ Skip - Sunday→First Monday rule`);
+  continue;
+}
+
+console.log(`  ✅ Passed Sunday→Monday check`);
+console.log(`  🔍 Saturday check: startDay=${startDay}, cutoff check=${startDate >= cutoff}, isMonday=${candidateDay === dayMap["Mon"]}`);
+
+// ✅ Skip FIRST Monday if start date is Saturday AFTER 9 AM
+if (startDay === dayMap["Sat"] && startDate >= cutoff && candidateDay === dayMap["Mon"] && i <= 3) {
+  console.log(`  ⏭️ SKIPPING FIRST MONDAY - Saturday after 9 AM!`);
+  continue;
+}
+
+
+
+
+
+      
 
   console.log(`  ✅ Passed Saturday→Monday check`);
 
