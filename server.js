@@ -1461,8 +1461,10 @@ if (normalizedDeliveryDays.length !== frequencyMultiplier) {
 
     const startDay = startDate.getDay();
 
-    const cutoff = new Date(startDate);
-    cutoff.setHours(9, 0, 0, 0);
+    // const cutoff = new Date(startDate);
+    // cutoff.setHours(9, 0, 0, 0);
+
+    const cutoff = ist9AMToUTC(startDate);
 
     const minShippingTime = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
 
