@@ -1274,11 +1274,11 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
     // ===============================
     // 6️⃣ Welcome Email
     // ===============================
-    try {
-      await sendWelcomeEmail(dbCustomer, sub);
-    } catch (err) {
-      console.error("Failed to send welcome email:", err);
-    }
+    // try {
+    //   await sendWelcomeEmail(dbCustomer, sub);
+    // } catch (err) {
+    //   console.error("Failed to send welcome email:", err);
+    // }
 
     res.json({
       order,
@@ -1820,14 +1820,33 @@ app.post("/verify-payment", async (req, res) => {
     // ===============================
     // 2️⃣ Activate subscription
     // ===============================
+    // const subscription = await prisma.subscription.update({
+    //   where: { razorpayOrderId: razorpay_order_id },
+    //   data: {
+    //     status: "active",
+    //     razorpayPaymentId: razorpay_payment_id,
+    //     paidAt: new Date(),
+    //   },
+    // });
+
     const subscription = await prisma.subscription.update({
-      where: { razorpayOrderId: razorpay_order_id },
-      data: {
-        status: "active",
-        razorpayPaymentId: razorpay_payment_id,
-        paidAt: new Date(),
-      },
-    });
+  where: { razorpayOrderId: razorpay_order_id },
+  data: {
+    status: "active",
+    razorpayPaymentId: razorpay_payment_id,
+    paidAt: new Date(),
+  },
+  include: {
+    customer: true, // 👈 IMPORTANT (to get email data)
+  },
+});
+
+// ✅ SEND EMAIL HERE (after success)
+try {
+  await sendWelcomeEmail(subscription.customer, subscription);
+} catch (err) {
+  console.error("Email failed:", err);
+}
 
     res.json({
       success: true,
