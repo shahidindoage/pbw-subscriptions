@@ -1117,6 +1117,7 @@ app.post("/create-subscription", async (req, res) => {
           razorpayId: rzCustomer.id,
           password: randomPassword,
           address: address || null,
+          pincode: address?.pincode || null, // ← ADD THIS
         },
       });
     } else {
@@ -1127,6 +1128,7 @@ app.post("/create-subscription", async (req, res) => {
           name,
           contact: contact || null,
           address: address || dbCustomer.address,
+          pincode: address?.pincode || dbCustomer.pincode, // ← ADD THIS
         },
       });
     }
@@ -1416,6 +1418,7 @@ const startDate = new Date(startDateRaw.getTime() - (5.5 * 60 * 60 * 1000));
           name,
           contact: contact || null,
           address: address || dbCustomer.address,
+          pincode: address?.pincode || dbCustomer.pincode, // ← ADD THIS
         },
       });
     }
@@ -2003,6 +2006,66 @@ app.post("/admin/regular-orders/clear-all", isAdmin, async (req, res) => {
 });
 
 // ===== END Regular Orders Routes =====
+
+
+// ===== END Pincode Validate Routes =====
+
+// Get customer's saved pincode
+app.post("/get-customer-pincode", async (req, res) => {
+  // console.log("Route hit", req.body);
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email required" });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { email },
+      select: { pincode: true }
+    });
+
+    if (!customer || !customer.pincode) {
+      return res.json({ pincode: null });
+    }
+
+    res.json({ pincode: customer.pincode });
+  } catch (err) {
+    console.error("Error fetching pincode:", err);
+    res.status(500).json({ error: "Failed to fetch pincode" });
+  }
+});
+
+// Update customer pincode
+app.post("/update-customer-pincode", async (req, res) => {
+  try {
+    const { email, pincode } = req.body;
+
+    if (!email || !pincode) {
+      return res.status(400).json({ error: "Email and pincode required" });
+    }
+
+    const customer = await prisma.customer.update({
+      where: { email },
+      data: { pincode }
+    });
+
+    res.json({ 
+      success: true, 
+      message: "Pincode updated successfully",
+      pincode: customer.pincode
+    });
+  } catch (err) {
+    console.error("Error updating pincode:", err);
+    res.status(500).json({ error: "Failed to update pincode" });
+  }
+});
+
+
+// ===== END Pincode Validate Routes =====
+
+
+
 // ===== Start Server =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

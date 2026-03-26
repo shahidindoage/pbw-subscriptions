@@ -138,6 +138,33 @@
 </div> -->
 
 <div class="container">
+
+  <div style="background:#fff; padding:20px; border-radius:8px; margin-bottom:20px;">
+  <h3 style="margin-bottom:15px; color:#333;">Delivery Pincode</h3>
+  
+  <div style="display:flex; gap:10px; align-items:center;width: 300px;">
+    <input 
+      type="text" 
+      id="customer-pincode-input" 
+      value="<%= customer.pincode || '' %>" 
+      placeholder="Enter pincode"
+      style="flex:1; padding:10px; border:1px solid #ddd; border-radius:5px;"
+    />
+    <button 
+      onclick="updatePincode()" 
+      style="padding:10px 20px; background:#5e8046; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:600;">
+      Update
+    </button>
+  </div>
+  
+  <p style="font-size:13px; color:#666; margin-top:10px;">
+    This pincode will be used for all future orders and subscriptions.
+  </p>
+  
+  <div id="pincode-update-msg" style="margin-top:10px; display:none;"></div>
+</div>
+
+
   <h2>Your Subscriptions</h2>
 
   <% if (!customer || !customer.subscriptions || customer.subscriptions.length === 0) { %>
@@ -359,5 +386,63 @@ function closeOrdersModal() {
   </div>
 </div>
 
+
+
+
+<script>
+async function updatePincode() {
+  const pincode = document.getElementById("customer-pincode-input").value.trim();
+  const msgBox = document.getElementById("pincode-update-msg");
+  const email = "<%= customer.email %>";
+  
+  if (!pincode) {
+    msgBox.style.display = "block";
+    msgBox.style.color = "#dc2626";
+    msgBox.textContent = "Please enter a pincode";
+    return;
+  }
+  
+  try {
+    const res = await fetch("https://pbw-subscriptions-5s2u.onrender.com/update-customer-pincode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, pincode })
+    });
+    
+    const data = await res.json();
+    
+    if (data.success) {
+      msgBox.style.display = "block";
+      msgBox.style.color = "#059669";
+      msgBox.textContent = "✅ Pincode updated successfully!";
+      
+      setTimeout(() => {
+        msgBox.style.display = "none";
+      }, 3000);
+    } else {
+      msgBox.style.display = "block";
+      msgBox.style.color = "#dc2626";
+      msgBox.textContent = "❌ " + (data.error || "Update failed");
+    }
+  } catch (err) {
+    msgBox.style.display = "block";
+    msgBox.style.color = "#dc2626";
+    msgBox.textContent = "❌ Failed to update pincode";
+  }
+}
+</script>
+
+<script>
+function sendHeight() {
+  const height = document.body.scrollHeight;
+  window.parent.postMessage({ type: "setHeight", height }, "*");
+}
+
+window.addEventListener("load", sendHeight);
+window.addEventListener("resize", sendHeight);
+
+// Optional: call after dynamic content loads
+setTimeout(sendHeight, 1000);
+</script>
 </body>
 </html>
