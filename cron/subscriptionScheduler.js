@@ -37,21 +37,30 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
   // 2️⃣ Prepare dayMap once (use everywhere)
 const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-// 3️⃣ Process subscriptions in parallel (batches of 5)
+// 3️⃣ Group by customer email → sequential per customer, parallel across customers
+const customerMap = new Map();
+for (const sub of subscriptions) {
+  const email = sub.customer.email;
+  if (!customerMap.has(email)) customerMap.set(email, []);
+  customerMap.get(email).push(sub);
+}
+
+const customerGroups = [...customerMap.values()];
 const BATCH_SIZE = 5;
 
-for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
-  const batch = subscriptions.slice(i, i + BATCH_SIZE);
-  
-  console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} subscriptions)`);
+for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
+  const batch = customerGroups.slice(i, i + BATCH_SIZE);
+
+  console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} customer groups)`);
 
   await Promise.allSettled(
-    batch.map(async (sub) => {
-      try {
+    batch.map(async (customerSubs) => {
+      for (const sub of customerSubs) {
+        try {
         // ⛔ Skip paused
         if (sub.pausedAt) {
           console.log(`⏸ Paused subscription ${sub.id}`);
-          return;
+          continue;
         }
 
         // ⛔ Skip expired (hard stop)
@@ -61,11 +70,11 @@ for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
             data: { status: "cancelled", nextShippingDate: null },
           });
           console.log(`🛑 Subscription ${sub.id} expired → auto-cancelled`);
-          return;
+          continue;
         }
 
         const shippingDate = sub.nextShippingDate;
-        if (!shippingDate) return;
+        if (!shippingDate) continue;
 
         // Determine how many hours before to create order
         let hoursBefore = 24; // default
@@ -81,14 +90,14 @@ for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
           console.log(
             `⏳ Not time yet for ${sub.id}. diffSec=${diffSec}`
           );
-          return;
+          continue;
         }
 
         // 🛑 Prevent duplicate orders
         const existingOrder = await prisma.shopifyOrder.findFirst({
           where: { subscriptionId: sub.id, shippingDate },
         });
-        if (existingOrder) return;
+        if (existingOrder) continue;
 
         // ===============================
         // 🛒 CREATE SHOPIFY ORDER
@@ -213,7 +222,7 @@ for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
             data: { status: "cancelled", nextShippingDate: null },
           });
           console.log(`🏁 ${createdOrdersCount}/${totalAllowedOrders} orders done → subscription cancelled`);
-          return;
+          continue;
         }
 
         // ➡️ CALCULATE NEXT SHIPPING DATE
@@ -251,6 +260,7 @@ for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
       } catch (err) {
         console.error(`❌ Error processing subscription ${sub.id}`, err);
       }
+    }
     })
   );
 }
