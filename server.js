@@ -2015,11 +2015,11 @@ app.post("/admin/subscription/:id/edit-shipping-date", isAdmin, async (req, res)
 
     // Convert IST input to UTC
     const istDate = new Date(nextShippingDate);
-    const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+    // const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
 
     await prisma.subscription.update({
       where: { id },
-      data: { nextShippingDate: utcDate },
+      data: { nextShippingDate: istDate },
     });
 
     res.json({ success: true });
