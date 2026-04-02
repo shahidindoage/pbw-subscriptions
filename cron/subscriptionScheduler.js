@@ -86,7 +86,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         const diffSec = differenceInSeconds(now, orderCreateTime);
 
         // Create order only if within ±30 seconds of target
-        if (diffSec < 0 || diffSec > 30) {
+        if (diffSec < 0 || diffSec > 90) {
           console.log(
             `⏳ Not time yet for ${sub.id}. diffSec=${diffSec}`
           );
