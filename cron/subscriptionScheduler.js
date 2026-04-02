@@ -15,10 +15,19 @@ import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
  * - Auto-cancels subscription after last order
  * - Skips paused, canceled, expired subscriptions
  */
-export async function runSubscriptionScheduler({ testMode = false } = {}) {
-  // ⏱️ Use real time in production "2026-02-20T12:00:00+05:30"
-  const now = new Date();
 
+let isSchedulerRunning = false;
+
+export async function runSubscriptionScheduler({ testMode = false } = {}) {
+  if (isSchedulerRunning) {
+    console.log("⏭️ Scheduler already running, skipping this tick");
+    return;
+  }
+
+  isSchedulerRunning = true;
+
+  try {
+  const now = new Date();
   console.log("🕒 Scheduler running at:", now.toISOString());
 
   // 1️⃣ Fetch active subscriptions
@@ -85,8 +94,8 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         const orderCreateTime = subHours(shippingDate, hoursBefore);
         const diffSec = differenceInSeconds(now, orderCreateTime);
 
-        // Create order only if within ±30 seconds of target
-        if (diffSec < 0 || diffSec > 90) {
+        // Create order only if within ±120 seconds of target
+        if (diffSec < 0 || diffSec > 120) {
           console.log(
             `⏳ Not time yet for ${sub.id}. diffSec=${diffSec}`
           );
@@ -266,4 +275,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
 }
 
 console.log("🕒 Scheduler run completed");
+  } finally {
+    isSchedulerRunning = false;
+  }
 }
