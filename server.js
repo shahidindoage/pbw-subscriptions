@@ -2004,7 +2004,31 @@ app.post("/admin/regular-orders/clear-all", isAdmin, async (req, res) => {
     });
   }
 });
+app.post("/admin/subscription/:id/edit-shipping-date", isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nextShippingDate } = req.body;
 
+    if (!nextShippingDate) {
+      return res.status(400).json({ error: "Date required" });
+    }
+
+    // Convert IST input to UTC
+    const istDate = new Date(nextShippingDate);
+    const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+
+    await prisma.subscription.update({
+      where: { id },
+      data: { nextShippingDate: utcDate },
+    });
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("Edit shipping date failed:", err);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
 // ===== END Regular Orders Routes =====
 
 
