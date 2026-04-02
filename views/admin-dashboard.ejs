@@ -685,6 +685,7 @@ button:disabled {
     <% if (s.status === "active") { %>
 <button type="button"
     class="btn btn-warning"
+    style="width: 85px;"
     onclick="openEditShippingModal('<%= s.id %>', '<%= s.nextShippingDate ? new Date(s.nextShippingDate).toISOString().slice(0,16) : '' %>')">
   Edit
 </button>
