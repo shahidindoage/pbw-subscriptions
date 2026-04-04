@@ -52,6 +52,10 @@ model Subscription {
   pausedAt            DateTime?
   address             Json?    // optional customer snapshot
   customerId          String
+
+promoCode     String?
+discountAmount Float?  @default(0)
+
   customer            Customer @relation(fields: [customerId], references: [id])
   
   shipments           SubscriptionShipment[]   // ✅ ADD THIS
@@ -194,4 +198,20 @@ model ShopifyToken {
   expiry      DateTime
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+
+
+
+model PromoCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  type        String   // "flat" | "percent" | "shipping"
+  value       Float    @default(0) // 100 for flat ₹100, 10 for 10%, 0 for free shipping
+  minOrder    Float    @default(0) // minimum order amount to apply
+  maxUses     Int?     // null = unlimited
+  usedCount   Int      @default(0)
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
 }
