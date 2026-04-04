@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Promo Codes - Admin</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      width: 240px;
+      background: #111827;
+      color: #fff;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .sidebar h3 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .sidebar a {
+      display: block;
+      color: #d1d5db;
+      text-decoration: none;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      transition: background 0.2s, color 0.2s;
+      font-size: 14px;
+    }
+
+    .sidebar a.active,
+    .sidebar a:hover {
+      background: #1f2937;
+      color: #ffffff;
+    }
+
+    .sidebar a:last-child {
+      margin-top: 45px;
+      background: #db2525;
+      color: #fff;
+    }
+
+    .sidebar a:last-child:hover {
+      background: #9a3412;
+    }
+
+    /* ===== Content ===== */
+    .content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    /* ===== Search ===== */
+    .search-box {
+      margin-bottom: 20px;
+    }
+
+    .search-box input {
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      outline: none;
+      font-size: 14px;
+      width: 300px;
+    }
+
+    .search-box input:focus {
+      border-color: #2563eb;
+    }
+
+    /* ===== Tables ===== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    th {
+      background: #5e8046;
+      color: white;
+      text-align: left;
+      padding: 12px 16px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover {
+      background: #f9fafb;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-active   { background: #d1fae5; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .badge-flat     { background: #dbeafe; color: #1e40af; }
+    .badge-percent  { background: #fef3c7; color: #92400e; }
+    .badge-shipping { background: #ede9fe; color: #5b21b6; }
+
+    .btn {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+
+    .btn-toggle {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .btn-toggle:hover { background: #f3f4f6; }
+
+    /* ===== Action Bar ===== */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #6b7280;
+    }
+
+    /* ===== Modal Overlay ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    /* ===== Modal Box ===== */
+    .modal-box {
+      background: #fff;
+      width: 520px;
+      max-width: 95%;
+      border-radius: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      background: #5e8046;
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      opacity: 0.8;
+    }
+
+    .modal-close:hover { opacity: 1; }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    /* ===== Form Grid ===== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .form-group input,
+    .form-group select {
+      padding: 9px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      transition: border 0.2s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #5e8046;
+      box-shadow: 0 0 0 2px rgba(94,128,70,0.15);
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-cancel {
+      padding: 9px 18px;
+      background: #f3f4f6;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-submit {
+      padding: 9px 20px;
+      background: #5e8046;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-submit:hover { background: #4a6636; }
+
+    .type-hint {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h3>Admin Panel</h3>
+    <a href="/admin/dashboard?page=customers">Customers</a>
+    <a href="/admin/dashboard?page=subscriptions">Subscriptions</a>
+    <a href="/admin/dashboard?page=invoices">Subscription Orders</a>
+    <a href="/admin/regular-orders">Regular Orders</a>
+    <a href="/admin/promo-codes" class="active">Promo Codes</a>
+    <a href="/admin/logout">Logout</a>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Search -->
+    <div class="search-box">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="Search by code, type…"
+        onkeyup="filterTable()"
+      />
+    </div>
+
+    <h2>Promo Codes</h2>
+
+    <!-- Action Bar -->
+    <div class="action-bar" style="margin-bottom:20px;">
+      <button class="btn btn-primary" onclick="openModal()">
+        + Create Promo Code
+      </button>
+    </div>
+
+    <!-- Table -->
+    <% if (promos.length === 0) { %>
+      <div class="empty-state">
+        <h3>No promo codes yet</h3>
+        <p>Click "Create Promo Code" to add your first discount.</p>
+      </div>
+    <% } else { %>
+    <table id="promoTable">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Type</th>
+          <th>Value</th>
+          <th>Min Order</th>
+          <th>Used / Max</th>
+          <th>Expires</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% promos.forEach(p => { %>
+        <tr>
+          <td><strong><%= p.code %></strong></td>
+
+          <td>
+            <% if (p.type === "flat") { %>
+              <span class="badge badge-flat">Flat ₹</span>
+            <% } else if (p.type === "percent") { %>
+              <span class="badge badge-percent">Percent %</span>
+            <% } else { %>
+              <span class="badge badge-shipping">Free Shipping</span>
+            <% } %>
+          </td>
+
+          <td>
+            <% if (p.type === "shipping") { %>
+              FREE
+            <% } else if (p.type === "percent") { %>
+              <%= p.value %>%
+            <% } else { %>
+              ₹<%= p.value %>
+            <% } %>
+          </td>
+
+          <td>₹<%= p.minOrder %></td>
+
+          <td><%= p.usedCount %> / <%= p.maxUses || "∞" %></td>
+
+          <td><%= p.expiresAt ? new Date(p.expiresAt).toDateString() : "Never" %></td>
+
+          <td>
+            <span class="badge <%= p.isActive ? 'badge-active' : 'badge-inactive' %>">
+              <%= p.isActive ? "Active" : "Inactive" %>
+            </span>
+          </td>
+
+          <td>
+            <form method="POST" action="/admin/promo-codes/<%= p.id %>/toggle" style="display:inline;">
+              <button type="submit" class="btn-toggle">
+                <%= p.isActive ? "Deactivate" : "Activate" %>
+              </button>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% } %>
+
+  </div>
+</div>
+
+<!-- ===== Create Promo Modal ===== -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal-box">
+
+    <div class="modal-header">
+      <h3>Create Promo Code</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <form method="POST" action="/admin/promo-codes">
+      <div class="modal-body">
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label>Code *</label>
+            <input name="code" placeholder="e.g. SAVE10" required style="text-transform:uppercase;">
+          </div>
+
+          <div class="form-group">
+            <label>Type *</label>
+            <select name="type" id="typeSelect" required onchange="updateValueHint()">
+              <option value="flat">Flat (₹ off)</option>
+              <option value="percent">Percent (% off)</option>
+              <option value="shipping">Free Shipping</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="valueGroup">
+            <label>Value *</label>
+            <input name="value" type="number" min="0" placeholder="e.g. 100" id="valueInput">
+            <span class="type-hint" id="valueHint">Enter flat amount in ₹</span>
+          </div>
+
+          <div class="form-group">
+            <label>Min Order Amount (₹)</label>
+            <input name="minOrder" type="number" min="0" placeholder="0 = no minimum">
+          </div>
+
+          <div class="form-group">
+            <label>Max Uses</label>
+            <input name="maxUses" type="number" min="1" placeholder="Leave blank for unlimited">
+          </div>
+
+          <div class="form-group">
+            <label>Expiry Date</label>
+            <input name="expiresAt" type="date">
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn-submit">Create Code</button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<script>
+  function openModal() {
+    document.getElementById("createModal").classList.add("active");
+  }
+
+  function closeModal() {
+    document.getElementById("createModal").classList.remove("active");
+  }
+
+  // Close on backdrop click
+  document.getElementById("createModal").addEventListener("click", function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  function updateValueHint() {
+    const type = document.getElementById("typeSelect").value;
+    const hint = document.getElementById("valueHint");
+    const valueGroup = document.getElementById("valueGroup");
+    const valueInput = document.getElementById("valueInput");
+
+    if (type === "shipping") {
+      valueGroup.style.opacity = "0.4";
+      valueInput.value = "0";
+      valueInput.disabled = true;
+      hint.textContent = "No value needed for free shipping";
+    } else if (type === "percent") {
+      valueGroup.style.opacity = "1";
+      valueInput.disabled = false;
+      valueInput.placeholder = "e.g. 10";
+      hint.textContent = "Enter percentage off (e.g. 10 = 10% off)";
+    } else {
+      valueGroup.style.opacity = "1";
+      valueInput.disabled = false;
+      valueInput.placeholder = "e.g. 100";
+      hint.textContent = "Enter flat amount in ₹";
+    }
+  }
+
+  function filterTable() {
+    const filter = document.getElementById("searchInput").value.toLowerCase();
+    const table = document.getElementById("promoTable");
+    if (!table) return;
+    const rows = table.getElementsByTagName("tr");
+    for (let i = 1; i < rows.length; i++) {
+      rows[i].style.display = rows[i].textContent.toLowerCase().includes(filter) ? "" : "none";
+    }
+  }
+</script>
+</body>
+</html>
