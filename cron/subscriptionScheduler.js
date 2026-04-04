@@ -7,6 +7,46 @@ import { uploadInvoice } from "../utils/uploadInvoice.js";
 import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
 // import { uploadInvoiceToShopify } from "../utils/shopifyUploadInvoice.js";
 
+function getFrequencyCount(frequency) {
+  const freq = frequency.toLowerCase();
+
+  if (freq.includes("once") && freq.includes("week")) return 1;
+  if (freq.includes("twice") && freq.includes("week")) return 2;
+  if (freq.includes("thrice") && freq.includes("week")) return 3;
+
+  if (freq.includes("once") && freq.includes("month")) return 1;
+  if (freq.includes("twice") && freq.includes("month")) return 2;
+
+  return 1; // fallback safety
+}
+
+function isMonthlyFrequency(frequency) {
+  return frequency.toLowerCase().includes("month");
+}
+
+function calculatePerOrderDiscount(sub) {
+  const totalDiscount = Number(sub.discountAmount || 0);
+
+  if (!totalDiscount) return 0;
+
+  const freqCount = getFrequencyCount(sub.frequency);
+  const isMonthly = isMonthlyFrequency(sub.frequency);
+
+  let totalDeliveries = 0;
+
+  if (isMonthly) {
+    const months = sub.period / 4; // convert weeks → months
+    totalDeliveries = freqCount * months;
+  } else {
+    totalDeliveries = freqCount * sub.period;
+  }
+
+  if (!totalDeliveries || totalDeliveries <= 0) return 0;
+
+  return totalDiscount / totalDeliveries;
+}
+
+
 /**
  * Scheduler:
  * - Creates Shopify orders exactly 24 hours before nextShippingDate
@@ -27,6 +67,7 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
   isSchedulerRunning = true;
 
   try {
+  // const now = new Date("2026-04-07T09:00:00+05:30");
   const now = new Date();
   console.log("🕒 Scheduler running at:", now.toISOString());
 
@@ -121,12 +162,21 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
           ? sub.variantId.split("/").pop()
           : sub.variantId;
 
+        const perOrderDiscount = calculatePerOrderDiscount(sub);  
+
         const shopifyOrderData = {
           order: {
             line_items: [{
               variant_id: Number(numericVariantId),
               quantity: sub.quantity,
             }],
+            ...(perOrderDiscount > 0 && {
+  discount_codes: [{
+    code: sub.promoCode || "DISCOUNT",
+    amount: perOrderDiscount.toFixed(2),
+    type: "fixed_amount"
+  }]
+}),
             customer: { first_name: firstName, last_name: lastName, email: sub.customer.email },
             financial_status: "paid",
             fulfillment_status: "unfulfilled",
@@ -135,6 +185,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
               { name: "SubscriptionId", value: sub.id },
               { name: "ShippingDate", value: shippingDate.toISOString() },
               { name: "Frequency", value: sub.frequency },
+              { name: "delivery Fee", value: sub.deliveryFee },
             ],
             shipping_address: {
               first_name: firstName,
