@@ -34,7 +34,16 @@ dotenv.config();
 
 const app = express();
 
-
+// app.get("/test/run-scheduler", async (req, res) => {
+//   try {
+//     const { runSubscriptionScheduler } = await import("./cron/subscriptionScheduler.js");
+//     await runSubscriptionScheduler();
+//     res.json({ success: true, message: "Scheduler ran successfully" });
+//   } catch (err) {
+//     console.error("Test scheduler error:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 // app.get("/dropbox/auth", (req, res) => {
 //   const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&token_access_type=offline&redirect_uri=${REDIRECT_URI}`;
@@ -1097,7 +1106,8 @@ app.post("/create-subscription", async (req, res) => {
       period,
       deliveryDays,
       totalAmount,
-      address
+      address,
+       promoCode   // ✅ ADD THIS
     } = req.body;
 
     // ===============================
@@ -1182,9 +1192,12 @@ const previousShipments = await prisma.subscriptionShipment.findMany({
   where: {
     subscription: {
       customerId: dbCustomer.id,
-       status: "active",
+      status: "active",
     },
     status: "scheduled",
+
+    // ✅ ONLY count chargeable shipments
+    isChargeable: true,
   },
   select: { shippingDate: true },
 });
@@ -1217,10 +1230,42 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
   waiveAll
 );
 
+// ===============================
+// 💰 Promo Code Logic
+// ===============================
+let discountAmount = 0;
+let freeShipping = false;
+let appliedPromo = null;
+
+if (promoCode) {
+  const promo = await prisma.promoCode.findUnique({
+    where: { code: promoCode.toUpperCase().trim() }
+  });
+
+  if (
+    promo &&
+    promo.isActive &&
+    (!promo.expiresAt || new Date() < promo.expiresAt) &&
+    (!promo.maxUses || promo.usedCount < promo.maxUses) &&
+    parsedTotalAmount >= promo.minOrder
+  ) {
+    if (promo.type === "flat") {
+      discountAmount = Math.min(promo.value, parsedTotalAmount);
+    } else if (promo.type === "percent") {
+      discountAmount = Math.round((promo.value / 100) * parsedTotalAmount);
+    } else if (promo.type === "shipping") {
+      freeShipping = true;
+    }
+    appliedPromo = promo;
+  }
+}
+
+const finalDeliveryFeeAfterPromo = freeShipping ? 0 : finalDeliveryFee;
+const finalPayableAmount = parsedTotalAmount - discountAmount + finalDeliveryFeeAfterPromo;
     // ===============================
     // 4️⃣ Create Razorpay Order
     // ===============================
-    const finalPayableAmount = parsedTotalAmount + finalDeliveryFee;
+    // const finalPayableAmount = parsedTotalAmount + finalDeliveryFee;
 
     const order = await razorpay.orders.create({
       amount: Math.round(finalPayableAmount * 100),
@@ -1243,32 +1288,37 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
     const subscriptionEndDate = addDays(nextShippingDate, parsedPeriod * 7);
 
     const sub = await prisma.subscription.create({
-      data: {
-        razorpayOrderId: order.id,
-        product,
-        variantId,
-        frequency,
-        quantity,
-        period: parsedPeriod,
-        deliveryDays: deliveryDays.join(","),
-        totalAmount: parsedTotalAmount,
-        deliveryFee: finalDeliveryFee,
-        status: "pending",
-        customerId: dbCustomer.id,
-        isOneTimePurchase: false,
-        subscriptionEndDate,
-        nextShippingDate,
-        address: address || null,
-      },
-    });
+  data: {
+    razorpayOrderId: order.id,
+    product,
+    variantId,
+    frequency,
+    quantity,
+    period: parsedPeriod,
+    deliveryDays: deliveryDays.join(","),
+    totalAmount: parsedTotalAmount,
+    deliveryFee: finalDeliveryFeeAfterPromo, // ✅ use after promo fee
+    status: "pending",
+    customerId: dbCustomer.id,
+    isOneTimePurchase: false,
+    subscriptionEndDate,
+    nextShippingDate,
+    address: address || null,
+    promoCode: appliedPromo?.code || null,       // ✅ ADD
+    discountAmount: discountAmount || 0,          // ✅ ADD
+  },
+});
 
 
     await prisma.subscriptionShipment.createMany({
   data: shipmentRecords.map(s => ({
     subscriptionId: sub.id,
     shippingDate: s.shippingDate,
-    isChargeable: s.isChargeable,
-    deliveryFee: s.deliveryFee,
+
+    // ✅ OVERRIDE ONLY FOR THIS SUBSCRIPTION
+    isChargeable: freeShipping ? false : s.isChargeable,
+    deliveryFee: freeShipping ? 0 : s.deliveryFee,
+
     status: "scheduled",
   })),
 });
@@ -1306,7 +1356,8 @@ app.post("/admin/manual-subscription", isAdmin, async (req, res) => {
       period,
       deliveryDays,
       address,
-      subscriptionStartDate
+      subscriptionStartDate,
+      promoCode   // ✅ ADD THIS
     } = req.body;
 
     // ===============================
@@ -1653,6 +1704,7 @@ const previousShipments = await prisma.subscriptionShipment.findMany({
       status: "active",
     },
     status: "scheduled",
+    isChargeable: true,   // ✅ IMPORTANT FIX
   },
   select: { shippingDate: true },
 });
@@ -1682,6 +1734,38 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
   existingDateKeys,
   waiveAll
 );
+
+// ===============================
+// 💰 Promo Code Logic
+// ===============================
+let discountAmount = 0;
+let freeShipping = false;
+let appliedPromo = null;
+
+if (promoCode) {
+  const promo = await prisma.promoCode.findUnique({
+    where: { code: promoCode.toUpperCase().trim() }
+  });
+
+  if (
+    promo &&
+    promo.isActive &&
+    (!promo.expiresAt || new Date() < promo.expiresAt) &&
+    (!promo.maxUses || promo.usedCount < promo.maxUses) &&
+    parsedTotalAmount >= promo.minOrder
+  ) {
+    if (promo.type === "flat") {
+      discountAmount = Math.min(promo.value, parsedTotalAmount);
+    } else if (promo.type === "percent") {
+      discountAmount = Math.round((promo.value / 100) * parsedTotalAmount);
+    } else if (promo.type === "shipping") {
+      freeShipping = true;
+    }
+    appliedPromo = promo;
+  }
+}
+const finalDeliveryFeeAfterPromo = freeShipping ? 0 : finalDeliveryFee;
+
     // ===============================
     // 7️⃣ Subscription End Date
     // ===============================
@@ -1707,7 +1791,9 @@ const { shipmentRecords, finalDeliveryFee } = buildShipmentRecords(
         period: parsedPeriod,
         deliveryDays: normalizedDeliveryDays.join(","),
         totalAmount: parsedTotalAmount,
-        deliveryFee: finalDeliveryFee,
+        deliveryFee: finalDeliveryFeeAfterPromo,
+promoCode: appliedPromo?.code || null,
+discountAmount: discountAmount || 0,
         status: "active",
         customerId: dbCustomer.id,
         isOneTimePurchase: false,
@@ -1721,8 +1807,8 @@ await prisma.subscriptionShipment.createMany({
   data: shipmentRecords.map(s => ({
     subscriptionId: sub.id,
     shippingDate: s.shippingDate,
-    isChargeable: s.isChargeable,
-    deliveryFee: s.deliveryFee,
+   isChargeable: freeShipping ? false : s.isChargeable,
+deliveryFee: freeShipping ? 0 : s.deliveryFee,
     status: "scheduled",
   })),
 });
@@ -1849,6 +1935,18 @@ try {
   await sendWelcomeEmail(subscription.customer, subscription);
 } catch (err) {
   console.error("Email failed:", err);
+}
+
+// ✅ Increment promo usage
+if (subscription.promoCode) {
+  try {
+    await prisma.promoCode.update({
+      where: { code: subscription.promoCode },
+      data: { usedCount: { increment: 1 } }
+    });
+  } catch (err) {
+    console.error("Promo usage increment failed:", err);
+  }
 }
 
     res.json({
@@ -2087,6 +2185,99 @@ app.post("/update-customer-pincode", async (req, res) => {
 
 
 // ===== END Pincode Validate Routes =====
+
+// ===== Start Discout Routes =====
+
+// ===== VALIDATE PROMO CODE =====
+app.post("/validate-promo", async (req, res) => {
+  try {
+    const { code, orderAmount } = req.body;
+
+    if (!code) return res.status(400).json({ error: "Code required" });
+
+    const promo = await prisma.promoCode.findUnique({
+      where: { code: code.toUpperCase().trim() }
+    });
+
+    if (!promo) return res.status(404).json({ error: "Invalid promo code" });
+    if (!promo.isActive) return res.status(400).json({ error: "Promo code is inactive" });
+    if (promo.expiresAt && new Date() > promo.expiresAt) return res.status(400).json({ error: "Promo code expired" });
+    if (promo.maxUses && promo.usedCount >= promo.maxUses) return res.status(400).json({ error: "Promo code limit reached" });
+    if (orderAmount < promo.minOrder) return res.status(400).json({ error: `Minimum order ₹${promo.minOrder} required` });
+
+    // Calculate discount
+    let discountAmount = 0;
+    let freeShipping = false;
+
+    if (promo.type === "flat") {
+      discountAmount = Math.min(promo.value, orderAmount);
+    } else if (promo.type === "percent") {
+      discountAmount = Math.round((promo.value / 100) * orderAmount);
+    } else if (promo.type === "shipping") {
+      freeShipping = true;
+      discountAmount = 0;
+    }
+
+    res.json({
+      valid: true,
+      type: promo.type,
+      value: promo.value,
+      discountAmount,
+      freeShipping,
+      message: promo.type === "shipping"
+        ? "Free shipping applied!"
+        : `Discount of ₹${discountAmount} applied!`
+    });
+
+  } catch (err) {
+    console.error("Promo validation error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ===== ADMIN: CREATE PROMO CODE =====
+app.post("/admin/promo-codes", isAdmin, async (req, res) => {
+  try {
+    const { code, type, value, minOrder, maxUses, expiresAt } = req.body;
+
+    const promo = await prisma.promoCode.create({
+      data: {
+        code: code.toUpperCase().trim(),
+        type,
+        value: Number(value),
+        minOrder: Number(minOrder) || 0,
+        maxUses: maxUses ? Number(maxUses) : null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      }
+    });
+
+    res.redirect("/admin/promo-codes");
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create promo code" });
+  }
+});
+
+// ===== ADMIN: LIST PROMO CODES =====
+app.get("/admin/promo-codes", isAdmin, async (req, res) => {
+  const promos = await prisma.promoCode.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+  res.render("admin-promo-codes", { promos });
+});
+
+// ===== ADMIN: TOGGLE ACTIVE =====
+app.post("/admin/promo-codes/:id/toggle", isAdmin, async (req, res) => {
+  const promo = await prisma.promoCode.findUnique({ where: { id: req.params.id } });
+  await prisma.promoCode.update({
+    where: { id: req.params.id },
+    data: { isActive: !promo.isActive }
+  });
+  res.redirect("/admin/promo-codes");
+});
+
+// ===== END Discout Routes =====
+
 
 
 
