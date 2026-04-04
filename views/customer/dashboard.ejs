@@ -191,7 +191,9 @@
   <%= sub.status === 'cancelled' ? 'Expired' : sub.status %>
 </td>
 
-          <td>₹ <%= sub.totalAmount %></td>
+          <td>
+  ₹<%= (Number(sub.totalAmount) + Number(sub.deliveryFee || 0) - Number(sub.discountAmount || 0)).toFixed(2) %>
+</td>
           <td>
   <%= new Date(sub.createdAt).toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
