@@ -520,7 +520,9 @@ button:disabled {
 <a href="/admin/regular-orders" class="<%= page === 'regular-orders' ? 'active' : '' %>">
       Regular Orders
     </a>
-
+<a href="/admin/promo-codes" class="<%= page === 'promo-codes' ? 'active' : '' %>">
+  Promo Codes
+</a>
     <br>
     <a href="/admin/logout">Logout</a>
   </div>
@@ -607,6 +609,7 @@ button:disabled {
       <!-- <th>One-Time</th> -->
       <th>Total</th>
       <th>Delivery Fee</th>
+      <th>Discount</th>
       <th>	Subscription Start</th>
       <th>Next Shipping</th>
       <th>End Date</th>
@@ -634,9 +637,13 @@ button:disabled {
 
         <!-- <td><%= s.isOneTimePurchase ? "Yes" : "No" %></td> -->
 
-        <td>₹<%= s.totalAmount %></td>
+        <td>
+  ₹<%= (Number(s.totalAmount) + Number(s.deliveryFee || 0) - Number(s.discountAmount || 0)).toFixed(2) %>
+</td>
 
         <td>₹<%= s.deliveryFee %></td>
+ <td>₹<%= s.discountAmount %></td>
+        
 <td><%= new Date(s.createdAt).toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       day: "2-digit",
@@ -1476,6 +1483,12 @@ function closeAddress() {
         <!-- Total -->
         <input id="calculatedTotal" type="text" readonly placeholder="Total Amount" />
 
+        <input 
+  id="promoCodeInput" 
+  name="promoCode" 
+  placeholder="Promo Code (optional)" 
+/>
+
         <input name="subscriptionStartDate" type="datetime-local" required />
 
       </div>
@@ -1524,6 +1537,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let basePrice = 0;
   let allowedDays = 0;
+  let discountAmount = 0;
 
   /* ===============================
      EMAIL AUTOFILL
@@ -1634,6 +1648,38 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+
+
+
+  async function applyPromo() {
+  const promoCode = document.getElementById("promoCodeInput").value.trim();
+
+  if (!promoCode || !basePrice) return;
+
+  try {
+    const res = await fetch(`/api/validate-promo?code=${promoCode}`);
+    const data = await res.json();
+
+    if (!data.valid) {
+      discountAmount = 0;
+      calculateTotal();
+      return;
+    }
+
+    if (data.type === "flat") {
+      discountAmount = data.value;
+    } else if (data.type === "percent") {
+      discountAmount = (data.value / 100) * basePrice;
+    } else if (data.type === "shipping") {
+      discountAmount = 0; // shipping handled backend
+    }
+
+    calculateTotal();
+
+  } catch (err) {
+    console.error("Promo error:", err);
+  }
+}
   /* ===============================
      TOTAL CALCULATION
      Weekly : price × qty × period(weeks) × deliveries-per-week
@@ -1664,9 +1710,13 @@ document.addEventListener("DOMContentLoaded", function () {
       totalDeliveries = period * multiplier;   // weeks × deliveries/week
     }
 
-    const total = basePrice * quantity * totalDeliveries;
+    const subtotal = basePrice * quantity * totalDeliveries;
 
-    totalField.value = "₹ " + total.toFixed(2);
+const finalTotal = subtotal - discountAmount;
+
+totalField.value = "₹ " + finalTotal.toFixed(2);
+
+    // totalField.value = "₹ " + total.toFixed(2);
 
     // Debug
     console.log({ isMonthly, basePrice, quantity, period, multiplier, totalDeliveries, total });
@@ -1679,7 +1729,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   quantityInput.addEventListener("input", calculateTotal);
   periodRadios.forEach(r => r.addEventListener("change", calculateTotal));
-
+document
+  .getElementById("promoCodeInput")
+  .addEventListener("input", applyPromo);
 });
 
 
