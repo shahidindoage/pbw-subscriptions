@@ -775,7 +775,7 @@ app.get("/customer/dashboard", async (req, res) => {
 
 
     if (!customer) {
-      return res.send("No customer found for this email");
+      return res.send("No active subscription found for this customer.");
     }
 
     // Ensure subscriptions array exists
