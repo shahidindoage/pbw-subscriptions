@@ -6,7 +6,23 @@ import { generateInvoiceBuffer } from "../utils/generateInvoice.js";
 import { uploadInvoice } from "../utils/uploadInvoice.js";
 import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
 // import { uploadInvoiceToShopify } from "../utils/shopifyUploadInvoice.js";
+async function ensureDbConnection() {
+  try {
+    await prisma.$connect();
+    await prisma.$queryRaw`SELECT 1`;
+    console.log("✅ DB connected");
+  } catch (err) {
+    console.log("❌ DB failed, retrying...");
 
+    await prisma.$disconnect();
+    await new Promise(res => setTimeout(res, 3000));
+
+    await prisma.$connect();
+    await prisma.$queryRaw`SELECT 1`;
+
+    console.log("✅ DB reconnected");
+  }
+}
 function getFrequencyCount(frequency) {
   const freq = frequency.toLowerCase();
 
@@ -68,14 +84,29 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
 
   try {
   // const now = new Date("2026-04-07T09:00:00+05:30");
+
+  await ensureDbConnection(); // ⭐ ADD THIS LINE
   const now = new Date();
   console.log("🕒 Scheduler running at:", now.toISOString());
 
   // 1️⃣ Fetch active subscriptions
-  const subscriptions = await prisma.subscription.findMany({
+  let subscriptions;
+
+try {
+  subscriptions = await prisma.subscription.findMany({
     where: { status: "active" },
     include: { customer: true },
   });
+} catch (err) {
+  console.log("⚠️ First query failed, retrying...");
+
+  await ensureDbConnection();
+
+  subscriptions = await prisma.subscription.findMany({
+    where: { status: "active" },
+    include: { customer: true },
+  });
+}
 
   if (!subscriptions.length) {
     console.log("No subscriptions to process.");
