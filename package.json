@@ -31,6 +31,7 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.13",
+    "p-limit": "^7.3.0",
     "pdfkit": "^0.17.2",
     "prisma": "^6.17.1",
     "puppeteer": "^24.37.5",

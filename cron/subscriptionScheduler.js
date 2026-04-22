@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma.js";
+import pLimit from "p-limit";
 import { createShopifyOrder } from "../utils/createShopifyOrder.js";
 import { addDays, subHours, differenceInSeconds } from "date-fns";
 import { sendEmail } from "../utils/email.js";
@@ -62,7 +63,16 @@ function calculatePerOrderDiscount(sub) {
   return totalDiscount / totalDeliveries;
 }
 
-
+async function retryShopify(fn, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+}
 /**
  * Scheduler:
  * - Creates Shopify orders exactly 24 hours before nextShippingDate
@@ -117,6 +127,7 @@ try {
 
   // 2️⃣ Prepare dayMap once (use everywhere)
 const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const limit = pLimit(2); // max 2 Shopify calls at once
 
 // 3️⃣ Group by customer email → sequential per customer, parallel across customers
 const customerMap = new Map();
@@ -167,7 +178,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         const diffSec = differenceInSeconds(now, orderCreateTime);
 
         // Create order only if within ±120 seconds of target
-        if (diffSec < 0 || diffSec > 120) {
+        if (diffSec < 0 || diffSec > 600) {
           console.log(
             `⏳ Not time yet for ${sub.id}. diffSec=${diffSec}`
           );
@@ -249,7 +260,14 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
           },
         };
 
-        const shopifyRes = await createShopifyOrder(shopifyOrderData);
+       const shopifyRes = await limit(() =>
+  retryShopify(async () => {
+    const res = await createShopifyOrder(shopifyOrderData);
+    await new Promise(r => setTimeout(r, 500));
+    return res;
+  })
+);
+
         const shopifyOrderId = shopifyRes?.order?.id?.toString() || null;
         const shopifyOrder = shopifyRes.order;
         console.log(`✅ Shopify order ${shopifyOrderId} created for subscription ${sub.id}`);
