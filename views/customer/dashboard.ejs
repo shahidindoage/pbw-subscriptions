@@ -241,9 +241,11 @@
     onclick="openOrdersModal('<%= sub.id %>')">
     Show Orders
   </button>
+ <% if(sub.status !== "cancelled") { %>
   <button onclick="openUpcomingModal('<%= sub.id %>')">
-  Upcoming
-</button>
+    Upcoming
+  </button>
+<% } %>
 
   <% if(sub.status === "active") { %>
     <form style="display:inline;" method="POST"
