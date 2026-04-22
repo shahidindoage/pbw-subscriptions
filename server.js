@@ -2295,8 +2295,8 @@ app.get("/customer/subscription/:id/upcoming", async (req, res) => {
       take: 10
     });
 
-    // const now = new Date();
-    const now = new Date("2026-05-02T10:00:00+05:30");
+    const now = new Date();
+    // const now = new Date("2026-05-02T10:00:00+05:30");
 // const now = new Date();
 
 const updatedShipments = shipments.map(s => {
