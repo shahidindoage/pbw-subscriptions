@@ -51,8 +51,9 @@
       margin-right: 5px;
     }
 
-    .stop { background: orange; color: white; }
-    .resume { background: green; color: white; }
+    .stop { background: orange; color: white;
+    width: -webkit-fill-available; }
+    .resume { background: green; color: white; width: -webkit-fill-available; }
     .cancel { background: red; color: white; }
 
     .status-active { color: green; font-weight: bold; }
@@ -235,11 +236,14 @@
 </td>
 
           
-          <td>
+          <td style="display: flex;flex-direction: column;gap: 5px;">
   <button class="resume"
     onclick="openOrdersModal('<%= sub.id %>')">
     Show Orders
   </button>
+  <button onclick="openUpcomingModal('<%= sub.id %>')">
+  Upcoming
+</button>
 
   <% if(sub.status === "active") { %>
     <form style="display:inline;" method="POST"
@@ -445,6 +449,70 @@ window.addEventListener("resize", sendHeight);
 
 // Optional: call after dynamic content loads
 setTimeout(sendHeight, 1000);
+</script>
+
+
+
+
+<div id="upcomingModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000;">
+  <div style="background:#fff; max-width:700px; margin:60px auto; padding:20px; border-radius:8px; position:relative;">
+    <h3>Upcoming Deliveries</h3>
+
+    <button onclick="closeUpcomingModal()" style="position:absolute; top:10px; right:10px;">✕</button>
+
+    <table style="margin-top:15px;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Status</th>
+        
+        </tr>
+      </thead>
+      <tbody id="upcomingTableBody">
+        <tr><td colspan="3">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+
+<script>
+function openUpcomingModal(subscriptionId) {
+  const modal = document.getElementById("upcomingModal");
+  const tbody = document.getElementById("upcomingTableBody");
+
+  modal.style.display = "block";
+  tbody.innerHTML = `<tr><td colspan="3">Loading…</td></tr>`;
+
+  fetch(`/customer/subscription/${subscriptionId}/upcoming`)
+    .then(res => res.json())
+    .then(data => {
+      if (!data.shipments || data.shipments.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3">No upcoming deliveries</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = "";
+
+      data.shipments.forEach(shipment => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${new Date(shipment.shippingDate).toDateString()}</td>
+            <td>${shipment.displayStatus}</td>
+        
+          </tr>
+        `;
+      });
+    })
+    .catch(() => {
+      tbody.innerHTML = `<tr><td colspan="3">Failed to load upcoming deliveries</td></tr>`;
+    });
+}
+
+function closeUpcomingModal() {
+  document.getElementById("upcomingModal").style.display = "none";
+}
 </script>
 </body>
 </html>

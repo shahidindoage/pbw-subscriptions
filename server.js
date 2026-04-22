@@ -2278,7 +2278,61 @@ app.post("/admin/promo-codes/:id/toggle", isAdmin, async (req, res) => {
 
 // ===== END Discout Routes =====
 
+app.get("/customer/subscription/:id/upcoming", async (req, res) => {
+  const { id } = req.params;
 
+  try {
+    const shipments = await prisma.subscriptionShipment.findMany({
+      where: {
+        subscriptionId: id,
+        shippingDate: {
+          gte: new Date()
+        }
+      },
+      orderBy: {
+        shippingDate: "asc"
+      },
+      take: 10
+    });
+
+    // const now = new Date();
+    const now = new Date("2026-05-02T10:00:00+05:30");
+// const now = new Date();
+
+const updatedShipments = shipments.map(s => {
+  const shippingDate = new Date(s.shippingDate);
+  const diffHours = (shippingDate - now) / (1000 * 60 * 60);
+
+  let displayStatus = "upcoming";
+
+  const isMonday = shippingDate.getDay() === 1;
+
+  // ✅ CASE 1: Already today or past
+  if (diffHours <= 0) {
+    displayStatus = "scheduled";
+  } 
+  // ✅ CASE 2: Monday → 48h window
+  else if (isMonday && diffHours <= 48) {
+    displayStatus = "scheduled";
+  } 
+  // ✅ CASE 3: Normal → 24h window
+  else if (!isMonday && diffHours <= 24) {
+    displayStatus = "scheduled";
+  }
+
+  return {
+    ...s,
+    displayStatus
+  };
+});
+
+    res.json({ shipments: updatedShipments });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch shipments" });
+  }
+});
 
 
 // ===== Start Server =====
