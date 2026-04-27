@@ -7,21 +7,35 @@ import { generateInvoiceBuffer } from "../utils/generateInvoice.js";
 import { uploadInvoice } from "../utils/uploadInvoice.js";
 import { uploadInvoiceToDropbox } from "../utils/dropbox.js";
 // import { uploadInvoiceToShopify } from "../utils/shopifyUploadInvoice.js";
-async function ensureDbConnection() {
+// async function ensureDbConnection() {
+//   try {
+//     await prisma.$connect();
+//     await prisma.$queryRaw`SELECT 1`;
+//     console.log("✅ DB connected");
+//   } catch (err) {
+//     console.log("❌ DB failed, retrying...");
+
+//     await prisma.$disconnect();
+//     await new Promise(res => setTimeout(res, 3000));
+
+//     await prisma.$connect();
+//     await prisma.$queryRaw`SELECT 1`;
+
+//     console.log("✅ DB reconnected");
+//   }
+// }
+
+
+async function safeDb(fn, retries = 2) {
   try {
-    await prisma.$connect();
-    await prisma.$queryRaw`SELECT 1`;
-    console.log("✅ DB connected");
+    return await fn();
   } catch (err) {
-    console.log("❌ DB failed, retrying...");
-
-    await prisma.$disconnect();
-    await new Promise(res => setTimeout(res, 3000));
-
-    await prisma.$connect();
-    await prisma.$queryRaw`SELECT 1`;
-
-    console.log("✅ DB reconnected");
+    if (retries > 0) {
+      console.log("Retry DB...");
+      await new Promise(r => setTimeout(r, 1000));
+      return safeDb(fn, retries - 1);
+    }
+    throw err;
   }
 }
 function getFrequencyCount(frequency) {
@@ -95,28 +109,24 @@ export async function runSubscriptionScheduler({ testMode = false } = {}) {
   try {
   // const now = new Date("2026-04-07T09:00:00+05:30");
 
-  await ensureDbConnection(); // ⭐ ADD THIS LINE
+  
   const now = new Date();
   console.log("🕒 Scheduler running at:", now.toISOString());
 
   // 1️⃣ Fetch active subscriptions
-  let subscriptions;
-
-try {
-  subscriptions = await prisma.subscription.findMany({
-    where: { status: "active" },
+  const subscriptions = await safeDb(() =>
+  prisma.subscription.findMany({
+    where: {
+      status: "active",
+      nextShippingDate: {
+        not: null,
+  gte: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+  lte: new Date(now.getTime() + 48 * 60 * 60 * 1000),
+      },
+    },
     include: { customer: true },
-  });
-} catch (err) {
-  console.log("⚠️ First query failed, retrying...");
-
-  await ensureDbConnection();
-
-  subscriptions = await prisma.subscription.findMany({
-    where: { status: "active" },
-    include: { customer: true },
-  });
-}
+  })
+);
 
   if (!subscriptions.length) {
     console.log("No subscriptions to process.");
@@ -157,10 +167,17 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
 
         // ⛔ Skip expired (hard stop)
         if (sub.subscriptionEndDate && now >= sub.subscriptionEndDate) {
-          await prisma.subscription.update({
+          await safeDb(() =>
+          prisma.subscription.update({
             where: { id: sub.id },
             data: { status: "cancelled", nextShippingDate: null },
-          });
+          })
+          
+          );
+          
+          
+          
+          
           console.log(`🛑 Subscription ${sub.id} expired → auto-cancelled`);
           continue;
         }
@@ -178,7 +195,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         const diffSec = differenceInSeconds(now, orderCreateTime);
 
         // Create order only if within ±120 seconds of target
-        if (diffSec < 0 || diffSec > 600) {
+       if (diffSec < -600 || diffSec > 1800){
           console.log(
             `⏳ Not time yet for ${sub.id}. diffSec=${diffSec}`
           );
@@ -186,9 +203,14 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         }
 
         // 🛑 Prevent duplicate orders
-        const existingOrder = await prisma.shopifyOrder.findFirst({
+        const existingOrder = await safeDb(() =>
+        prisma.shopifyOrder.findFirst({
           where: { subscriptionId: sub.id, shippingDate },
-        });
+        })
+      );
+
+
+
         if (existingOrder) continue;
 
         // ===============================
@@ -295,7 +317,10 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
         // ===============================
         // 💾 SAVE SHOPIFY ORDER WITH INVOICE
         // ===============================
-        await prisma.shopifyOrder.create({
+       await safeDb(() =>
+        
+        
+        prisma.shopifyOrder.create({
           data: {
             subscriptionId: sub.id,
             shopifyOrderId,
@@ -308,7 +333,8 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
             invoiceUrl,
             invoiceNumber,
           },
-        });
+        })
+      );
 
         // ===============================
         // 🧮 CHECK TOTAL DELIVERY LIMIT
@@ -320,16 +346,24 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
           ? Math.round(sub.period / 4) * deliveriesPerWeek
           : deliveriesPerWeek * sub.period;
 
-        const createdOrdersCount = await prisma.shopifyOrder.count({
+        const createdOrdersCount = await safeDb(() =>
+        
+        
+        prisma.shopifyOrder.count({
           where: { subscriptionId: sub.id },
-        });
+        })
+      );
 
         // 🚫 If quota reached → cancel immediately
         if (createdOrdersCount >= totalAllowedOrders) {
-          await prisma.subscription.update({
+          await safeDb(() =>
+          
+          prisma.subscription.update({
             where: { id: sub.id },
             data: { status: "cancelled", nextShippingDate: null },
-          });
+          })
+
+        );
           console.log(`🏁 ${createdOrdersCount}/${totalAllowedOrders} orders done → subscription cancelled`);
           continue;
         }
@@ -360,10 +394,14 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
           }
         }
 
-        await prisma.subscription.update({
+        await safeDb(() =>
+        
+        
+        prisma.subscription.update({
           where: { id: sub.id },
           data: { nextShippingDate: nextDate },
-        });
+        })
+      );
 
         console.log(`➡️ Next shipping date set to ${nextDate.toISOString()}`);
       } catch (err) {

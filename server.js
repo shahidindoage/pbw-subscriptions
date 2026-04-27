@@ -9,7 +9,7 @@ import crypto from "crypto";
 import axios from "axios";
 import {fulfillShopifyOrder  } from "./utils/shopifyFulfillmentManager.js";
 // import "./cron/shopifyOrderScheduler.js";
-// import "./cron/runCron.js"  
+import "./cron/cron.js"  
 // import { addDays } from "date-fns";
 import archiver from "archiver";
 import cronRoutes from "./routes/cron.js";
