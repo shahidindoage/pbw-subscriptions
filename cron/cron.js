@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { runSubscriptionScheduler } from "./subscriptionScheduler.js";
 
-cron.schedule("35,40,45,50,55,60 12 * * *", async () => {
+cron.schedule("5,10,15,20,25,30 9 * * *", async () => {
   console.log("⏰ Running (9:05–9:30)");
   await runSubscriptionScheduler();
 }, {
