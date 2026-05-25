@@ -228,6 +228,21 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
 
         const perOrderDiscount = calculatePerOrderDiscount(sub);  
 
+        // ✨ Added: Map the missing stateCode dynamically before payload structure
+        const stateToCodeMap = {
+          "haryana": "HR",
+          "delhi": "DL",
+          "national capital territory of delhi": "DL",
+          "nct of delhi": "DL",
+          "uttar pradesh": "UP",
+          "punjab": "PB",
+          "rajasthan": "RJ",
+          "maharashtra": "MH",
+          "karnataka": "KA"
+        };
+        const rawState = (addr.state || "").trim().toLowerCase();
+        const calculatedStateCode = addr.stateCode || stateToCodeMap[rawState] || "DL";  
+
         const shopifyOrderData = {
           order: {
             line_items: [{
@@ -258,7 +273,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
               address2: addr.line2 || "",
               city: addr.city || "",
               province: addr.state || "",
-              province_code: addr.stateCode || "DL",
+              province_code: calculatedStateCode, // 🛠️ Changed: Safely maps "HR" or "UP"
               zip: addr.pincode || "",
               country: "India",
               country_code: "IN",
@@ -271,7 +286,7 @@ for (let i = 0; i < customerGroups.length; i += BATCH_SIZE) {
               address2: addr.line2 || "",
               city: addr.city || "",
               province: addr.state || "",
-              province_code: addr.stateCode || "DL",
+              province_code: calculatedStateCode, // 🛠️ Changed: Safely maps "HR" or "UP"
               zip: addr.pincode || "",
               country: "India",
               country_code: "IN",
